@@ -1,6 +1,7 @@
 module Main where
 
-import Lib
+import Data.Heterogeneous
+import Data.Indexer
 
 main :: IO ()
 main = someFunc

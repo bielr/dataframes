@@ -3,7 +3,7 @@ module Data.Heterogeneous
   ) where
 
 
-import Data.Heterogeneous.Class     as Exports
-import Data.Heterogeneous.Kind      as Exports
-import Data.Heterogeneous.SARec     as Exports
-import Data.Heterogeneous.TypeLevel as Exports
+import Data.Heterogeneous.Constraints     as Exports
+import Data.Heterogeneous.Functors        as Exports
+import Data.Heterogeneous.HArray          as Exports
+import Data.Heterogeneous.HDistributive   as Exports

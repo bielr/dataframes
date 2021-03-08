@@ -1,11 +1,11 @@
 {-# language UndecidableInstances #-}
 module Data.Heterogeneous.TypeLevel.Kind
-  ( Constraint
+  ( Type
+  , Constraint
   , KindOf
   , Nat
-  , HTyCon
-  , Type
-  , TyCon
+  , HTyConK
+  , NAryTyConK
   ) where
 
 import GHC.TypeNats
@@ -19,13 +19,13 @@ type KindOf :: forall k. k -> Type
 type KindOf (a :: k) = k
 
 
-type HTyCon :: Type -> Type
-type HTyCon k = (k -> Type) -> [k] -> Type
+type HTyConK :: Type -> Type
+type HTyConK k = (k -> Type) -> [k] -> Type
 
 
-type TyCon :: Peano -> Type -> Type -> Type
+type NAryTyConK :: Peano -> Type -> Type -> Type
 
-type family TyCon n argk resk where
-    TyCon 'Zero     argk resk = resk
-    TyCon ('Succ n) argk resk = argk -> TyCon n argk resk
+type family NAryTyConK n argk resk where
+    NAryTyConK 'Zero     argk resk = resk
+    NAryTyConK ('Succ n) argk resk = argk -> NAryTyConK n argk resk
 

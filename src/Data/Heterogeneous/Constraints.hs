@@ -4,6 +4,7 @@
 {-# language UndecidableSuperClasses #-}
 module Data.Heterogeneous.Constraints
   ( Constraint
+  , Dict(..)
   , TrueC
   , ComposeC
   , FoldConstraints
@@ -16,11 +17,13 @@ module Data.Heterogeneous.Constraints
 
 import Data.Kind (Constraint)
 
+import Data.Constraint (Dict(..))
+
 import Data.Heterogeneous.Constraints.Tupled
 import Data.Heterogeneous.Constraints.TupledInstances ()
 import Data.Heterogeneous.TypeLevel.Index
 import Data.Heterogeneous.TypeLevel.List
-import Data.Heterogeneous.TypeLevel.Nats
+import Data.Heterogeneous.TypeLevel.SNat
 
 
 type TrueC :: forall k. k -> Constraint

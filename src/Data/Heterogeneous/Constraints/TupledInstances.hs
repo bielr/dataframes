@@ -8,7 +8,8 @@ import Data.Heterogeneous.Constraints.Tupled
 import Data.Heterogeneous.TypeLevel
 
 
-$(generateTupledInstancesFromTo 0 64)
+-- $(generateTupledInstancesFromTo 0 64)
+$(generateTupledInstancesFromTo 0 32)
 
 
 instance {-# overlappable #-} (c, Tupled cs) => Tupled (c ': cs) where

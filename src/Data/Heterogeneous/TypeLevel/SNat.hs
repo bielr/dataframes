@@ -1,6 +1,7 @@
 {-# language AllowAmbiguousTypes #-}
+{-# language MagicHash #-}
 {-# language UndecidableInstances #-}
-module Data.Heterogeneous.TypeLevel.Nats
+module Data.Heterogeneous.TypeLevel.SNat
   ( module Peano
   , PredPeano
   , Truth
@@ -14,6 +15,7 @@ module Data.Heterogeneous.TypeLevel.Nats
   , lePredTail
   , SNat(..)
   , getSNat
+  , toSNat
   , zeroNat
   , succNat
   , unsafePredNat
@@ -26,6 +28,7 @@ module Data.Heterogeneous.TypeLevel.Nats
   ) where
 
 import GHC.TypeLits
+import GHC.Exts (proxy#)
 
 import Data.Kind (Constraint, Type)
 import Data.Type.Equality
@@ -101,6 +104,11 @@ newtype SNat i = SNat { snat :: Int }
 getSNat :: forall i. KnownPeano i => SNat i
 getSNat = SNat (peanoInt @i)
 {-# inline getSNat #-}
+
+
+toSNat :: forall i. KnownNat i => SNat (NatToPeano i)
+toSNat = SNat (fromInteger (natVal' @i proxy#))
+{-# inline toSNat #-}
 
 
 zeroNat :: SNat 'Zero

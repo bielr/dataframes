@@ -9,16 +9,17 @@ import Control.Lens qualified as L
 import Data.Profunctor.Unsafe
 
 import Data.Heterogeneous.Functors
-import Data.Heterogeneous.HFoldable
-import Data.Heterogeneous.HFunctor
-import Data.Heterogeneous.HMonoid
-import Data.Heterogeneous.HContainer.Sequential
-import Data.Heterogeneous.HTraversable
+import Data.Heterogeneous.Class.HCreate
+import Data.Heterogeneous.Class.HFoldable
+import Data.Heterogeneous.Class.HFunctor
+import Data.Heterogeneous.Class.HMonoid
+import Data.Heterogeneous.Class.HTraversable
+import Data.Heterogeneous.Class.Sequential
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
 
 
-type HList :: forall k. HTyCon k
+type HList :: forall k. HTyConK k
 
 data HList f as where
     HNil :: HList f '[]
@@ -80,14 +81,14 @@ instance HMonoid HList where
     {-# inline hcons #-}
 
 
-instance HGenerate HList '[] where
-    hgenerateA _ = pure HNil
-    {-# inline hgenerateA #-}
+instance HCreate HList '[] where
+    hcreateA _ = pure HNil
+    {-# inline hcreateA #-}
 
 
-instance HGenerate HList as => HGenerate HList (a ': as) where
-    hgenerateA gf = liftA2 (:&) (gf zeroNat) (hgenerateA (gf . succNat))
-    {-# inline hgenerateA #-}
+instance HCreate HList as => HCreate HList (a ': as) where
+    hcreateA gf = liftA2 (:&) (gf zeroNat) (hcreateA (gf . succNat))
+    {-# inline hcreateA #-}
 
 
 instance HFunctor HList where
@@ -194,7 +195,7 @@ instance HTraversable HList where
 instance TypeError
     ('Text "There is no HIxed instance for HList because performance is really bad for the most common use case. Use hlistIx manually instead")
     => HIxed HList where
-    hix = error "No instance HIxed HList"
+    hix _ = error "No instance HIxed HList"
 
 
 hlistIx :: i < Length as => SNat i -> Lens' (HList f as) (f (as !! i))

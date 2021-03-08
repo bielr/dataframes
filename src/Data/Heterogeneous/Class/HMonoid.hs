@@ -1,4 +1,4 @@
-module Data.Heterogeneous.HMonoid where
+module Data.Heterogeneous.Class.HMonoid where
 
 import Control.Lens (Iso, review)
 
@@ -7,7 +7,7 @@ import Data.Heterogeneous.TypeLevel
 
 -- Class for any record that can be constructed from a single element
 
-type HSingleton :: forall k. HTyCon k -> Constraint
+type HSingleton :: forall k. HTyConK k -> Constraint
 
 class HSingleton hf where
     hsingleton :: Iso (hf f '[a]) (hf f '[b]) (f a) (f b)

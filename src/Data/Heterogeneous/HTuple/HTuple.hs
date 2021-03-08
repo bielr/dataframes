@@ -12,12 +12,20 @@ import Data.Vinyl.Extra.Kind
 import Data.Vinyl.Extra.TypeLevel
 
 
-type TupleTypeCon :: forall (n :: Nat) -> TypeCon n Type Type
-type family TupleTypeCon n = t | t -> n
+type TupleTyCon :: forall (n :: Nat) -> NAryTypeConK n Type Type
+type family TupleTyCon n = t | t -> n
+
+
+type TupleOf :: [Type] -> Type
+newtype TupleOf as = Tuple (AppTyCon as (TupleTyCon (Length as)))
+
+
+type HTuple :: forall k. HTyConK k
+newtype HTuple f as = HTuple (TupleOf (Map f as))
 
 
 type IsTupleOf :: [Type] -> Type -> Constraint
-type IsTupleOf as t = AppliedTypeCon as (TupleTypeCon (RLength as))
+type IsTupleOf as t = AppliedTypeCon as (TupleTyCon (Length as))
 
 
 type RTupled :: forall k. RecordKind k -> [k] -> Constraint

@@ -1,14 +1,14 @@
-module Data.Heterogeneous.HTraversable where
+module Data.Heterogeneous.Class.HTraversable where
 
 import Data.Heterogeneous.Functors
-import Data.Heterogeneous.HFoldable
-import Data.Heterogeneous.HFunctor
+import Data.Heterogeneous.Class.HFoldable
+import Data.Heterogeneous.Class.HFunctor
 import Data.Heterogeneous.TypeLevel
 
 
 -- Traversable-like records
 
-type HTraversable :: forall k. HTyCon k -> Constraint
+type HTraversable :: forall k. HTyConK k -> Constraint
 
 class (HFunctor hf, HFoldable hf) => HTraversable hf where
     htraverse ::

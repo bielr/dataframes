@@ -65,6 +65,7 @@ common shared-properties
     , constraints
     , containers
     , distributive
+    , first-class-families
     , ghc-prim
     , lens
     , primitive
@@ -72,6 +73,7 @@ common shared-properties
     , tagged
     , template-haskell
     , text
+    , type-errors
     , vector
     , vector-algorithms
   default-language: Haskell2010
@@ -79,26 +81,29 @@ common shared-properties
 library
   import: shared-properties
   exposed-modules:
+      Data.Functor.Boilerplate
       Data.Heterogeneous
-      Data.Heterogeneous.Functors
-      Data.Heterogeneous.HContainer.Access
-      Data.Heterogeneous.HContainer.Sequential
-      Data.Heterogeneous.HFoldable
-      Data.Heterogeneous.HFunctor
-      Data.Heterogeneous.HList
-      Data.Heterogeneous.HMonoid
-      Data.Heterogeneous.HSmallArray
-      Data.Heterogeneous.HTraversable
+      Data.Heterogeneous.Class.HCreate
+      Data.Heterogeneous.Class.HFoldable
+      Data.Heterogeneous.Class.HFunctor
+      Data.Heterogeneous.Class.HMonoid
+      Data.Heterogeneous.Class.HTraversable
+      Data.Heterogeneous.Class.Member
+      Data.Heterogeneous.Class.Sequential
+      Data.Heterogeneous.Class.Subset
       Data.Heterogeneous.Constraints
       Data.Heterogeneous.Constraints.TH
       Data.Heterogeneous.Constraints.Tupled
       Data.Heterogeneous.Constraints.TupledInstances
+      Data.Heterogeneous.Functors
+      Data.Heterogeneous.HList
+      Data.Heterogeneous.HSmallArray
       Data.Heterogeneous.TypeLevel
       Data.Heterogeneous.TypeLevel.Index
       Data.Heterogeneous.TypeLevel.Kind
       Data.Heterogeneous.TypeLevel.List
-      Data.Heterogeneous.TypeLevel.Nats
       Data.Heterogeneous.TypeLevel.Peano
+      Data.Heterogeneous.TypeLevel.SNat
       Data.Heterogeneous.TypeLevel.Subseq
       Data.Indexer
   other-modules: Paths_dataframes
@@ -109,6 +114,7 @@ executable dataframes-exe
   main-is: Main.hs
   other-modules: Paths_dataframes
   hs-source-dirs: app
+  build-depends: dataframes
 
 test-suite dataframes-test
   import: shared-properties
@@ -116,3 +122,4 @@ test-suite dataframes-test
   main-is: Spec.hs
   other-modules: Paths_dataframes
   hs-source-dirs: test
+  build-depends: dataframes

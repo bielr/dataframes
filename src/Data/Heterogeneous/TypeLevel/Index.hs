@@ -12,7 +12,7 @@ import Data.Type.Equality
 import Unsafe.Coerce
 
 import Data.Heterogeneous.TypeLevel.List
-import Data.Heterogeneous.TypeLevel.Nats
+import Data.Heterogeneous.TypeLevel.SNat
 
 
 

@@ -4,11 +4,11 @@
 {-# language UndecidableInstances #-}
 module Data.Heterogeneous.HSmallArray where
 --  ( HSmallArray(..)
---  , generate
---  , generateA
+--  , create
+--  , createA
 --  , index
 --  , setIndex
---  , hsize
+--  , size
 --  ) where
 
 import GHC.Exts (Any)
@@ -23,11 +23,12 @@ import qualified Data.Primitive.SmallArray as SA
 
 import Unsafe.Coerce (unsafeCoerce)
 
-import Data.Heterogeneous.HFoldable
-import Data.Heterogeneous.HFunctor
-import Data.Heterogeneous.HMonoid
-import Data.Heterogeneous.HContainer.Sequential
-import Data.Heterogeneous.HTraversable
+import Data.Heterogeneous.Class.HCreate
+import Data.Heterogeneous.Class.HFoldable
+import Data.Heterogeneous.Class.HFunctor
+import Data.Heterogeneous.Class.HMonoid
+import Data.Heterogeneous.Class.HTraversable
+import Data.Heterogeneous.Class.Sequential
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
 
@@ -36,18 +37,22 @@ import Data.Heterogeneous.TypeLevel.Subseq
 
 type role HSmallArray representational nominal
 
-type HSmallArray :: forall k. HTyCon k
+type HSmallArray :: forall k. HTyConK k
 
 newtype HSmallArray f as = HSmallArray (SA.SmallArray Any)
 
 
-generate :: forall as f.
+unsafeFromListN :: SNat (Length as) -> [Any] -> HSmallArray f as
+unsafeFromListN n as = HSmallArray $ SA.smallArrayFromListN (snat n) as
+
+
+create :: forall as f.
     SNat (Length as)
     -> (forall i. i < Length as => SNat i -> f (as !! i))
     -> HSmallArray f as
-generate n f = HSmallArray $ SA.runSmallArray do
+create n f = HSmallArray $ SA.runSmallArray do
     marr :: SA.SmallMutableArray s Any
-        <- SA.newSmallArray (snat n) (error "generate: uninitialized element")
+        <- SA.newSmallArray (snat n) (error "create: uninitialized element")
 
     let write :: i < Length as => SNat i -> ST s ()
         write i = SA.writeSmallArray marr (snat i) (unsafeCoerce $! f i)
@@ -57,12 +62,12 @@ generate n f = HSmallArray $ SA.runSmallArray do
     return marr
 
 
-generateST :: forall as f s.
+createST :: forall as f s.
     SNat (Length as)
     -> (forall i. i < Length as => SNat i -> ST s (f (as !! i)))
     -> ST s (HSmallArray f as)
-generateST n f = do
-    mutArr <- SA.newSmallArray (snat n) (error "generateST: uninitialized element")
+createST n f = do
+    mutArr <- SA.newSmallArray (snat n) (error "createST: uninitialized element")
 
     foldrNatInts n (\i st -> do
           !fa <- f i
@@ -80,15 +85,15 @@ runNewSArr :: NewSArr a -> SA.SmallArray a
 runNewSArr (NewSArr m) = SA.runSmallArray m
 
 
-generateA :: forall as f g.
+createA :: forall as f g.
     Applicative g
     => SNat (Length as)
     -> (forall i. i < Length as => SNat i -> g (f (as !! i)))
     -> g (HSmallArray f as)
-generateA n f =
+createA n f =
     let newA :: NewSArr Any
         newA = NewSArr $
-            SA.newSmallArray (snat n) (error "generateA: uninitialized element")
+            SA.newSmallArray (snat n) (error "createA: uninitialized element")
 
         write :: forall i a. SNat i -> f a -> NewSArr Any -> NewSArr Any
         write i !fa (NewSArr marr) = NewSArr do
@@ -96,8 +101,8 @@ generateA n f =
             arr <$ SA.writeSmallArray arr (snat i) (unsafeCoerce fa)
     in
         HSmallArray . runNewSArr <$> foldrNatInts n (\i -> liftA2 (write i) (f i)) (pure newA)
-{-# inlinable [0] generateA #-}
-{-# rules "generateA/generateST" generateA = generateST #-}
+{-# inlinable [0] createA #-}
+{-# rules "createA/createST" createA = createST #-}
 
 
 unsafeIndex :: HSmallArray f as -> SNat i -> f (as !! i)
@@ -116,8 +121,8 @@ setIndex (HSmallArray arr) i !fa =
         return marr
 
 
-hsize :: HSmallArray f as -> SNat (Length as)
-hsize (HSmallArray arr) = SNat (SA.sizeofSmallArray arr)
+size :: HSmallArray f as -> SNat (Length as)
+size (HSmallArray arr) = SNat (SA.sizeofSmallArray arr)
 
 
 get :: forall a as f. KnownPeano (IndexOf a as) => HSmallArray f as -> f a
@@ -186,30 +191,6 @@ setSubset (HSmallArray arr) (HSmallArray upd) =
         return marr
 
 
--- instance Vy.RecElem HSmallArray a b (a ': as) (b ': as) 'Z where
---     rlensC = salens
---     {-# inline rlensC #-}
---     rgetC = get
---     {-# inline rgetC #-}
---     rputC = set @a
---     {-# inline rputC #-}
---
--- instance (IndexOf a (x ': as) ~ 'S i, KnownPeano i, Vy.RecElem HSmallArray a b as bs i)
---   => Vy.RecElem HSmallArray a b (x ': as) (x ': bs) ('S i) where
---     rlensC = salens
---     {-# inline rlensC #-}
---     rgetC = get
---     {-# inline rgetC #-}
---     rputC = set @a
---     {-# inline rputC #-}
-
-
--- instance (is ~ IndexesOf ss rs, KnownPeanos is, KnownLength ss)
---          => Vy.RecSubset HSmallArray ss rs is where
---   rsubsetC f big = fmap (setSubset big) (f (getSubset big))
---   {-# inline rsubsetC #-}
-
-
 instance HSingleton HSmallArray where
     hsingleton = L.iso (\(HSmallArray afas) -> unsafeCoerce (SA.indexSmallArray afas 0))
                        (\fa -> HSmallArray (SA.smallArrayFromListN 1 [unsafeCoerce fa]))
@@ -224,38 +205,38 @@ instance HMonoid HSmallArray where
     {-# inline happend #-}
 
 
-instance KnownLength as => HGenerate HSmallArray as where
-    hgenerateA = generateA getSNat
-    {-# inline hgenerateA #-}
+instance KnownLength as => HCreate HSmallArray as where
+    hcreateA = createA getSNat
+    {-# inline hcreateA #-}
 
 
 instance HFunctor HSmallArray where
     himap h harrf =
-        generate (hsize harrf) \i -> h i (index harrf i)
+        create (size harrf) \i -> h i (index harrf i)
     {-# inline himap #-}
 
     hizipWith h harrf harrg =
-        generate (hsize harrf) \i -> h i (index harrf i) (index harrg i)
+        create (size harrf) \i -> h i (index harrf i) (index harrg i)
     {-# inline hizipWith #-}
 
 
 instance HFoldable HSmallArray where
     hifoldr f z harr =
-        foldrNatInts (hsize harr) (\i r -> f i (index harr i) r) z
+        foldrNatInts (size harr) (\i r -> f i (index harr i) r) z
     {-# inline hifoldr #-}
 
     hifoldr2 f z harrf harrg =
-        foldrNatInts (hsize harrf) (\i r -> f i (index harrf i) (index harrg i) r) z
+        foldrNatInts (size harrf) (\i r -> f i (index harrf i) (index harrg i) r) z
     {-# inline hifoldr2 #-}
 
 
 instance HTraversable HSmallArray where
     htraverse h harrf =
-        generateA (hsize harrf) \i -> h (index harrf i)
+        createA (size harrf) \i -> h (index harrf i)
     {-# inline htraverse #-}
 
     htraverse2 h harrf harrg =
-        generateA (hsize harrf) \i -> h (index harrf i) (index harrg i)
+        createA (size harrf) \i -> h (index harrf i) (index harrg i)
     {-# inline htraverse2 #-}
 
 

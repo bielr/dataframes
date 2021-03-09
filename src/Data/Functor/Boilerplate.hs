@@ -3,40 +3,69 @@
 module Data.Functor.Boilerplate where
 
 import Control.Lens.Iso (Iso, iso)
+import Data.Profunctor.Unsafe ((#.), (.#))
 
 import Data.Kind
-import Data.Functor.Identity
 import Data.Functor.Compose
+import Data.Functor.Const
+import Data.Functor.Identity
 
 import Fcf.Core
 
 
-type IsBoilerplate :: forall k. (k -> Type) -> Constraint
+type RemoveBoilerplate :: forall {k}. (k -> Type) -> Constraint
 
-class IsBoilerplate (f :: k -> Type) where
+class RemoveBoilerplate (f :: k -> Type) where
     type Simplified f (a :: k) :: Type
+    type Simplified f a = f a
 
     simplify :: f a -> Simplified f a
+
     complicate :: Simplified f a -> f a
 
     simplified :: Iso (f a) (f b) (Simplified f a) (Simplified f b)
     simplified = iso simplify complicate
 
+    default simplify :: Simplified f a ~ f a => f a -> Simplified f a
+    simplify = id
 
-instance IsBoilerplate Identity where
+    default complicate :: Simplified f a ~ f a => Simplified f a -> f a
+    complicate = id
+
+
+instance RemoveBoilerplate (Const a) where
+    type Simplified (Const a) b = a
+
+    simplify = getConst
+    complicate = Const
+
+
+instance RemoveBoilerplate Identity where
     type Simplified Identity a = a
 
     simplify = runIdentity
     complicate = Identity
 
 
-instance IsBoilerplate (Compose f g) where
-    type Simplified (Compose f g) a = f (g a)
+instance
+    (Functor f, RemoveBoilerplate f, RemoveBoilerplate g)
+    => RemoveBoilerplate (Compose f g) where
 
-    simplify = getCompose
-    complicate = Compose
+    type Simplified (Compose f g) a = Simplified f (Simplified g a)
+
+    simplify = simplify . fmap simplify .# getCompose
+    complicate = Compose #. fmap complicate . complicate
 
 
-data Simplify :: (k -> Type) -> k -> Exp Type
+instance RemoveBoilerplate []
+instance RemoveBoilerplate ((,) x)
+instance RemoveBoilerplate ((->) a)
+instance RemoveBoilerplate (Either e)
+instance RemoveBoilerplate IO
+instance RemoveBoilerplate Maybe
+
+
+type Simplify :: (k -> Type) -> k -> Exp Type
+data Simplify f a :: Exp Type
 
 type instance Eval (Simplify f a) = Simplified f a

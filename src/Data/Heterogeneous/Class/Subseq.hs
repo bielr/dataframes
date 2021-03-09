@@ -1,13 +1,13 @@
 {-# language AllowAmbiguousTypes #-}
 {-# language UndecidableInstances #-}
-module Data.Heterogeneous.Class.Sequential
-  ( HIxed(..)
-  , HSubseqI(..)
+module Data.Heterogeneous.Class.Subseq
+  ( HSubseqI(..)
   , HSubseq
   , hsubseq
   , HQuotientI(..)
   , HQuotient
   , hsubseqSplit
+  , IsSubseqWithError
   ) where
 
 import Control.Lens.Type
@@ -15,12 +15,6 @@ import Control.Lens.Type
 import Data.Heterogeneous.Constraints
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
-
-
--- Indexed access to the elements of an heterogeneous sequence
-
-class HIxed hf where
-    hix :: i < Length as => SNat i -> Lens' (hf f as) (f (as !! i))
 
 
 -- field subsequences (different from subsets)
@@ -48,8 +42,8 @@ class HSubseqI hf ss '[] rs rs' is => HQuotientI hf ss rs rs' is where
     -- Isomorphism when ss' ~ '[]: splitting rs into ss and rs'
     --  view hsubseqC :: rs -> ss
     --  set hsubseqC HNil :: rs -> rs'
-    --  view (hsubseqSplitC Refl) = view hsubseqC &&& set hsubseqC RNil
-    --  rs is a permutation of to ss ++ rs'
+    --  view hsubseqSplitC = view hsubseqC &&& set hsubseqC RNil
+    --  rs is a permutation of ss ++ rs'
     hsubseqSplitC :: Iso' (hf f rs) (hf f ss, hf f rs')
 
 

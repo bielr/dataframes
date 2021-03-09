@@ -4,7 +4,7 @@
 {-# language UndecidableInstances #-}
 module Data.Frame.Field
   ( Field(..)
-  , untagged
+  , fieldValue
   , renamed
   , renamedTo
   ) where
@@ -15,31 +15,30 @@ import Foreign.Storable (Storable)
 import Control.Lens.Type
 import qualified Control.Lens as L
 
+import Data.Functor.Boilerplate
 import qualified Data.Vector.Generic         as VG
 import qualified Data.Vector.Generic.Mutable as VGM
 import qualified Data.Vector.Unboxed         as VU
 
-import Data.Vinyl.TypeLevel (Snd)
-import qualified Data.Vinyl.XRec as VX
-
 import Data.Frame.Kind
 
 
-newtype Field (tag :: FieldK) = Field { getField :: Snd tag }
+type Field :: FieldK -> Type
+newtype Field col = Field { getField :: FieldType col }
     deriving (Generic)
 
 
-deriving instance Eq (Snd tag) => Eq (Field tag)
-deriving instance Ord (Snd tag) => Ord (Field tag)
-deriving instance Show (Snd tag) => Show (Field tag)
+deriving instance Eq (FieldType col) => Eq (Field col)
+deriving instance Ord (FieldType col) => Ord (Field col)
+deriving instance Show (FieldType col) => Show (Field col)
 
-deriving instance Storable (Snd tag) => Storable (Field tag)
+deriving instance Storable (FieldType col) => Storable (Field col)
 
 
-newtype instance VU.Vector (Field col) = FieldVec (VU.Vector (Snd col))
-newtype instance VU.MVector s (Field col) = FieldMVec (VU.MVector s (Snd col))
+newtype instance VU.Vector (Field col) = FieldVec (VU.Vector (FieldType col))
+newtype instance VU.MVector s (Field col) = FieldMVec (VU.MVector s (FieldType col))
 
-instance VGM.MVector VU.MVector (Snd col) => VGM.MVector VU.MVector (Field col) where
+instance VGM.MVector VU.MVector (FieldType col) => VGM.MVector VU.MVector (Field col) where
     basicLength (FieldMVec v)                       = VGM.basicLength v
     basicUnsafeSlice start len (FieldMVec v)        = FieldMVec $ VGM.basicUnsafeSlice start len v
     basicOverlaps (FieldMVec v) (FieldMVec v')      = VGM.basicOverlaps v v'
@@ -55,7 +54,7 @@ instance VGM.MVector VU.MVector (Snd col) => VGM.MVector VU.MVector (Field col) 
     basicUnsafeGrow (FieldMVec v) len               = FieldMVec <$> VGM.basicUnsafeGrow v len
 
 
-instance VG.Vector VU.Vector (Snd col) => VG.Vector VU.Vector (Field col) where
+instance VG.Vector VU.Vector (FieldType col) => VG.Vector VU.Vector (Field col) where
     basicUnsafeFreeze (FieldMVec v)             = FieldVec <$> VG.basicUnsafeFreeze v
     basicUnsafeThaw (FieldVec v)                = FieldMVec <$> VG.basicUnsafeThaw v
     basicLength (FieldVec v)                    = VG.basicLength v
@@ -65,26 +64,26 @@ instance VG.Vector VU.Vector (Snd col) => VG.Vector VU.Vector (Field col) where
     elemseq (FieldVec v) (Field a) b            = VG.elemseq v a b
 
 
-instance VU.Unbox (Snd col) => VU.Unbox (Field col)
+instance VU.Unbox (FieldType col) => VU.Unbox (Field col)
 
 
-instance VX.IsoHKD Field col where
-    type HKD Field col = Snd col
+instance RemoveBoilerplate Field where
+    type Simplified Field col = FieldType col
 
-    unHKD = Field
-    toHKD = getField
-
-
-untagged :: forall s a b. Iso (Field '(s, a)) (Field '(s, b)) a b
-untagged = L.coerced
-{-# inline untagged #-}
+    simplify = getField
+    complicate = Field
 
 
-renamed :: forall s t a. Iso' (Field '(s, a)) (Field '(t, a))
+fieldValue :: forall s a b. Iso (Field (s :> a)) (Field (s :> b)) a b
+fieldValue = L.coerced
+{-# inline fieldValue #-}
+
+
+renamed :: forall s t a. Iso' (Field (s :> a)) (Field (t :> a))
 renamed = L.coerced
 {-# inline renamed #-}
 
 
-renamedTo :: forall t s a. Iso' (Field '(s, a)) (Field '(t, a))
+renamedTo :: forall t s a. Iso' (Field (s :> a)) (Field (t :> a))
 renamedTo = L.coerced
 {-# inline renamedTo #-}

@@ -11,8 +11,6 @@ import Data.Vector.Primitive       qualified as VP
 import Data.Vector.Storable        qualified as VS
 import Data.Vector.Unboxed         qualified as VU
 
-import Data.Vinyl.TypeLevel (Snd)
-
 import Data.Frame.Field
 import Data.Frame.Kind
 
@@ -42,7 +40,7 @@ instance KnownVectorMode 'Unboxed    where sVectorMode = SUnboxed
 
 type VectorModeOf :: Type -> VectorMode
 type family VectorModeOf a
-type instance VectorModeOf (Field col) = VectorModeOf (Snd col)
+type instance VectorModeOf (Field col) = VectorModeOf (FieldType col)
 type instance VectorModeOf Bool        = 'Unboxed
 type instance VectorModeOf Char        = 'Unboxed
 type instance VectorModeOf Int         = 'Unboxed

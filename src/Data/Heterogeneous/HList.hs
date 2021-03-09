@@ -9,12 +9,13 @@ import Control.Lens qualified as L
 import Data.Profunctor.Unsafe
 
 import Data.Heterogeneous.Functors
+import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.HCreate
 import Data.Heterogeneous.Class.HFoldable
 import Data.Heterogeneous.Class.HFunctor
 import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.HTraversable
-import Data.Heterogeneous.Class.Sequential
+import Data.Heterogeneous.Class.Subseq
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
 

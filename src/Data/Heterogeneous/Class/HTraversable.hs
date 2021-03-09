@@ -24,7 +24,6 @@ class (HFunctor hf, HFoldable hf) => HTraversable hf where
         -> hf f' as
         -> g (hf h as)
 
-
 hsequence :: (HTraversable hf, Applicative g) => hf (g :. f) as -> g (hf f as)
 hsequence = htraverse getCompose
 {-# inline hsequence #-}

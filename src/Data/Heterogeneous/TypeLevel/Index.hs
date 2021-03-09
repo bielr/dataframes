@@ -5,13 +5,14 @@ module Data.Heterogeneous.TypeLevel.Index where
 
 import Prelude hiding ((!!))
 
-import GHC.TypeLits (ErrorMessage(..))
-
 import Data.Type.Equality
+import Type.Errors
 
 import Unsafe.Coerce
 
+import Data.Heterogeneous.TypeLevel.Kind
 import Data.Heterogeneous.TypeLevel.List
+import Data.Heterogeneous.TypeLevel.Peano
 import Data.Heterogeneous.TypeLevel.SNat
 
 
@@ -32,7 +33,6 @@ type IndexError as i =
     ':$$: 'Text "The given index is greater than the length of the list ("
     ':<>: 'ShowType (PeanoToNat (Length as))
     ':<>: 'Text ")"
-
 
 
 type IndexAll :: forall k. [k] -> [Peano] -> [k]
@@ -67,6 +67,30 @@ type IndexesOfError as bs =
     ':<>: 'ShowType as
     ':<>: 'Text " were found in the list "
     ':<>: 'ShowType bs
+
+
+
+type IsIndexOf :: forall k. Peano -> k -> [k] -> Constraint
+type IsIndexOf i a as = (IndexOf a as ~ i, (as !! i) ~ a)
+
+type IsIndexOfWithError :: forall k. Peano -> k -> [k] -> Constraint
+type IsIndexOfWithError i a as =
+    ( WhenStuck (ForcePeano (IndexOf a as))
+        (DelayError (IndexOfError a as))
+    , IsIndexOf i a as
+    )
+
+
+type AreIndexesOf :: forall k. [Peano] -> [k] -> [k] -> Constraint
+type AreIndexesOf is as bs = (IndexesOf as bs ~ is, IndexAll bs is ~ as)
+
+type AreIndexesOfWithError :: forall k. [Peano] -> [k] -> [k] -> Constraint
+type AreIndexesOfWithError is as bs =
+    ( WhenStuck (ForcePeanos (IndexesOf as bs))
+        (DelayError (IndexesOfError as bs))
+    , AreIndexesOf is as bs
+    )
+
 
 type Drop :: forall k. Peano -> [k] -> [k]
 type family Drop i as where

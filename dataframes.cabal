@@ -81,15 +81,21 @@ common shared-properties
 library
   import: shared-properties
   exposed-modules:
+      Control.Rowwise
+      Data.Frame.Kind
+      Data.Frame.Field
+      Data.Frame.Internal.ColVector
+      Data.Frame.Impl.ColVectors
       Data.Functor.Boilerplate
       Data.Heterogeneous
       Data.Heterogeneous.Class.HCreate
+      Data.Heterogeneous.Class.HDistributive
       Data.Heterogeneous.Class.HFoldable
       Data.Heterogeneous.Class.HFunctor
       Data.Heterogeneous.Class.HMonoid
       Data.Heterogeneous.Class.HTraversable
       Data.Heterogeneous.Class.Member
-      Data.Heterogeneous.Class.Sequential
+      Data.Heterogeneous.Class.Subseq
       Data.Heterogeneous.Class.Subset
       Data.Heterogeneous.Constraints
       Data.Heterogeneous.Constraints.TH
@@ -105,6 +111,7 @@ library
       Data.Heterogeneous.TypeLevel.Peano
       Data.Heterogeneous.TypeLevel.SNat
       Data.Heterogeneous.TypeLevel.Subseq
+      Data.Heterogeneous.TypeLevel.Subset
       Data.Indexer
   other-modules: Paths_dataframes
   hs-source-dirs: src

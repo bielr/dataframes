@@ -12,6 +12,8 @@ module Data.Heterogeneous.TypeLevel.Peano
   , PeanosToNats
   , peanoInt
   , peanoInts
+  , ForcePeano
+  , ForcePeanos
   ) where
 
 import GHC.Prim (proxy#)
@@ -65,3 +67,20 @@ type KnownPeanos is = KnownNats (PeanosToNats is)
 
 peanoInts :: forall is. KnownPeanos is => [Int]
 peanoInts = natVals @(PeanosToNats is)
+
+
+
+-- for use with IfStuck
+
+type ForcePeano :: Peano -> ()
+type family ForcePeano i where
+    ForcePeano 'Zero     = '()
+    ForcePeano ('Succ i) = ForcePeano i
+
+
+type ForcePeanos :: [Peano] -> ()
+type family ForcePeanos is where
+    ForcePeanos '[]             = '()
+    ForcePeanos ('Zero   ': is) = ForcePeanos is
+    ForcePeanos ('Succ i ': is) = ForcePeanos (i ': is)
+

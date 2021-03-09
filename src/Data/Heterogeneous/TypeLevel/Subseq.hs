@@ -4,7 +4,6 @@ module Data.Heterogeneous.TypeLevel.Subseq
   , DecSeq
   , IndexesOf
   , IndexesOfSubseq
-  , IsSubsetWithError
   , IsSubseq
   , IsSubseqWithError
   , ReplaceSubseq
@@ -47,25 +46,12 @@ type family IndexesOfSubseq as bs where
     IndexesOfSubseq (a ': as) (b ': bs) = IncSeq (IndexesOfSubseq (a ': as) bs)
 
 
-type ForcePeanos :: [Peano] -> ()
-type family ForcePeanos is where
-    ForcePeanos '[]             = '()
-    ForcePeanos ('Zero   ': is) = ForcePeanos is
-    ForcePeanos ('Succ i ': is) = ForcePeanos (i ': is)
-
-
 type IndexesOfSubseqMonotoneError :: forall k. [k] -> [k] -> ErrorMessage
 type IndexesOfSubseqMonotoneError as bs =
     'Text "The elements of "
     ':<>: 'ShowType as
     ':<>: 'Text " appear in a different order in "
     ':<>: 'ShowType bs
-
-
-type IsSubsetWithError :: forall k. [k] -> [k] -> Constraint
-type IsSubsetWithError ss rs =
-    WhenStuck (ForcePeanos (IndexesOf ss rs))
-      (DelayError (IndexesOfError ss rs))
 
 
 type IsSubseq :: forall k. [k] -> [k] -> [Peano] -> Constraint
@@ -78,22 +64,26 @@ instance
     ( IsSubseq ss rs dec_is
     , IncSeq dec_is ~ is
     , s ~ r
-    ) => IsSubseq (s ': ss) (r ': rs) ('Zero ': is)
+    )
+    => IsSubseq (s ': ss) (r ': rs) ('Zero ': is)
 
 instance
     ( IsSubseq ss rs (i ': dec_is)
     , IncSeq dec_is ~ is
     , IndexesOfSubseq ss (r ': rs) ~ IncSeq (IndexesOfSubseq ss rs)
-    ) => IsSubseq ss (r ': rs) ('Succ i ': is)
+    )
+    => IsSubseq ss (r ': rs) ('Succ i ': is)
 
 
 type IsSubseqWithError :: forall k. [k] -> [k] -> Constraint
 type IsSubseqWithError ss rs =
-    IfStuck (ForcePeanos (IndexesOf ss rs))
-      (DelayError (IndexesOfError ss rs))
-      (Pure (IfStuck (ForcePeanos (IndexesOfSubseq ss rs))
-              (DelayError (IndexesOfSubseqMonotoneError ss rs))
-              (Pure (IsSubseq ss rs (IndexesOfSubseq ss rs)))))
+    ( IfStuck (ForcePeanos (IndexesOf ss rs))
+        (DelayError (IndexesOfError ss rs))
+        (Pure
+            (WhenStuck (ForcePeanos (IndexesOfSubseq ss rs))
+                (DelayError (IndexesOfSubseqMonotoneError ss rs))))
+    , IsSubseq ss rs (IndexesOfSubseq ss rs)
+    )
 
 
 -- Replacing ss with ss' in rs yields rs'

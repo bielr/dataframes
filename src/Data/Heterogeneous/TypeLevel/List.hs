@@ -3,6 +3,7 @@ module Data.Heterogeneous.TypeLevel.List where
 
 import Prelude hiding ((++))
 
+import Fcf.Core
 import GHC.TypeLits
 
 import Data.Heterogeneous.TypeLevel.Kind
@@ -13,6 +14,13 @@ type Map :: forall k j. (k -> j) -> [k] -> [j]
 type family Map f xs where
     Map _       '[] = '[]
     Map f (x ': xs) = f x ': Map f xs
+
+
+type MapExp :: forall k j. (k -> Exp j) -> [k] -> Exp [j]
+data MapExp f xs :: Exp [j]
+
+type instance Eval (MapExp f '[])       = '[]
+type instance Eval (MapExp f (x ': xs)) = Eval (f x) ': Eval (MapExp f xs)
 
 
 type (++) :: forall k. [k] -> [k] -> [k]
@@ -37,6 +45,7 @@ type Delete :: forall k. k -> [k] -> [k]
 type family Delete a as where
     Delete a (a ': as) = as
     Delete a (b ': as) = Delete a as
+
 
 type DeleteError :: forall k. k -> [k] -> ErrorMessage
 type DeleteError a as =

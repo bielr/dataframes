@@ -2,14 +2,11 @@
 {-# language RoleAnnotations #-}
 {-# language StrictData #-}
 {-# language UndecidableInstances #-}
-module Data.Heterogeneous.HSmallArray where
---  ( HSmallArray(..)
---  , create
---  , createA
---  , index
---  , setIndex
---  , size
---  ) where
+module Data.Heterogeneous.HSmallArray
+  ( HSmallArray
+  , unsafeHSmallArrayFromListN
+  , hSmallArrayToList
+  ) where
 
 import GHC.Exts (Any)
 
@@ -24,11 +21,13 @@ import qualified Data.Primitive.SmallArray as SA
 import Unsafe.Coerce (unsafeCoerce)
 
 import Data.Heterogeneous.Class.HCreate
+import Data.Heterogeneous.Class.HDistributive
 import Data.Heterogeneous.Class.HFoldable
 import Data.Heterogeneous.Class.HFunctor
 import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.HTraversable
-import Data.Heterogeneous.Class.Sequential
+import Data.Heterogeneous.Class.Member
+import Data.Heterogeneous.Class.Subseq
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
 
@@ -42,8 +41,11 @@ type HSmallArray :: forall k. HTyConK k
 newtype HSmallArray f as = HSmallArray (SA.SmallArray Any)
 
 
-unsafeFromListN :: SNat (Length as) -> [Any] -> HSmallArray f as
-unsafeFromListN n as = HSmallArray $ SA.smallArrayFromListN (snat n) as
+unsafeHSmallArrayFromListN :: SNat (Length as) -> [Any] -> HSmallArray f as
+unsafeHSmallArrayFromListN n as = HSmallArray $ SA.smallArrayFromListN (snat n) as
+
+hSmallArrayToList :: HSmallArray f as -> [Any]
+hSmallArrayToList (HSmallArray arr) = toList arr
 
 
 create :: forall as f.
@@ -121,17 +123,25 @@ setIndex (HSmallArray arr) i !fa =
         return marr
 
 
+unsafeSetIndex :: HSmallArray f as -> SNat i -> f a -> HSmallArray f bs
+unsafeSetIndex (HSmallArray arr) i !fa = do
+    HSmallArray $ SA.runSmallArray do
+        marr <- SA.thawSmallArray arr 0 (SA.sizeofSmallArray arr)
+        SA.writeSmallArray marr (snat i) (unsafeCoerce fa)
+        return marr
+
+
 size :: HSmallArray f as -> SNat (Length as)
 size (HSmallArray arr) = SNat (SA.sizeofSmallArray arr)
 
 
-get :: forall a as f. KnownPeano (IndexOf a as) => HSmallArray f as -> f a
-get harrf =
+_get :: forall a as f. KnownPeano (IndexOf a as) => HSmallArray f as -> f a
+_get harrf =
     unsafeCoerce $ unsafeIndex harrf (getSNat @(IndexOf a as))
 
 
-set :: forall a b as bs f. KnownPeano (IndexOf a as) => HSmallArray f as -> f b -> HSmallArray f bs
-set (HSmallArray arr) !fb =
+_set :: forall a b as bs f. KnownPeano (IndexOf a as) => HSmallArray f as -> f b -> HSmallArray f bs
+_set (HSmallArray arr) !fb =
     HSmallArray $ SA.runSmallArray do
         marr <- SA.thawSmallArray arr 0 (SA.sizeofSmallArray arr)
         SA.writeSmallArray marr (peanoInt @(IndexOf a as)) (unsafeCoerce fb)
@@ -161,24 +171,24 @@ getSubseq :: forall ss rs f.
 getSubseq = unsafeIndexAll @(IndexesOfSubseq ss rs)
 
 
-getSubset :: forall ss rs f.
+_getSubset :: forall ss rs f.
     ( IsSubsetWithError ss rs
     , KnownPeanos (IndexesOf ss rs)
     , KnownLength ss
     )
     => HSmallArray f rs
     -> HSmallArray f ss
-getSubset = unsafeIndexAll @(IndexesOf ss rs)
+_getSubset = unsafeIndexAll @(IndexesOf ss rs)
 
 
-setSubset :: forall ss rs f.
+_setSubset :: forall ss rs f.
     ( KnownPeanos (IndexesOf ss rs)
     , KnownLength ss
     )
     => HSmallArray f rs
     -> HSmallArray f ss
     -> HSmallArray f rs
-setSubset (HSmallArray arr) (HSmallArray upd) =
+_setSubset (HSmallArray arr) (HSmallArray upd) =
     HSmallArray $ SA.runSmallArray do
         marr <- SA.thawSmallArray arr 0 (SA.sizeofSmallArray arr)
 
@@ -189,6 +199,31 @@ setSubset (HSmallArray arr) (HSmallArray upd) =
 
         go (peanoInts @(IndexesOf ss rs)) 0
         return marr
+
+
+instance
+    ( KnownPeano i
+    , (as !! i) ~ a
+    )
+    => HGetI HSmallArray a as i where
+
+    hgetC harrf = unsafeIndex harrf (getSNat @i)
+
+
+instance
+    ( KnownPeano i
+    , HGetI HSmallArray a as i
+    , HGetI HSmallArray b bs i
+    , ReplaceSubseq '[a] '[b] as bs '[i]
+    )
+    => HSetI HSmallArray a b as bs i where
+
+    hsetC fa harrf = unsafeSetIndex harrf (getSNat @i) fa
+
+
+instance HIxed HSmallArray where
+    hix i = L.lens (`index` i) (`setIndex` i)
+    {-# inline hix #-}
 
 
 instance HSingleton HSmallArray where
@@ -240,9 +275,8 @@ instance HTraversable HSmallArray where
     {-# inline htraverse2 #-}
 
 
-instance HIxed HSmallArray where
-    hix i = L.lens (`index` i) (`setIndex` i)
-    {-# inline hix #-}
+instance KnownLength as => HDistributive HSmallArray as
+
 
 
 instance

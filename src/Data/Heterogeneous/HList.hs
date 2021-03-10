@@ -112,9 +112,9 @@ instance HFunctor HList where
         go :: forall j. SNat j -> HList f (Drop j as) -> HList g (Drop j as)
         go !_ HNil      = HNil
         go !j (a :& as) =
-            assuming (eqDropIndex @_ @j @as) $
-            assuming (eqDropNext @_ @j @as) $
-            assuming (leDropLength @_ @j @as) $
+            assuming (eqDropIndex @j @as) $
+            assuming (eqDropNext @j @as) $
+            assuming (leDropLength @j @as) $
                 h j a :& go (succNat j) as
     {-# inline himap #-}
 
@@ -129,9 +129,9 @@ instance HFunctor HList where
         go :: forall j. SNat j -> HList f (Drop j as) -> HList g (Drop j as) -> HList h (Drop j as)
         go !_ HNil      HNil      = HNil
         go !j (a :& as) (b :& bs) =
-            assuming (eqDropIndex @_ @j @as) $
-            assuming (eqDropNext @_ @j @as) $
-            assuming (leDropLength @_ @j @as) $
+            assuming (eqDropIndex @j @as) $
+            assuming (eqDropNext @j @as) $
+            assuming (leDropLength @j @as) $
                 h j a b :& go (succNat j) as bs
     {-# inline hizipWith #-}
 
@@ -157,9 +157,9 @@ instance HFoldable HList where
         go :: forall j. SNat j -> HList f (Drop j as) -> r
         go _ HNil        = z
         go j (fa :& fas) =
-            assuming (eqDropIndex  @_ @j @as) $
-            assuming (eqDropNext   @_ @j @as) $
-            assuming (leDropLength @_ @j @as) $
+            assuming (eqDropIndex  @j @as) $
+            assuming (eqDropNext   @j @as) $
+            assuming (leDropLength @j @as) $
                 f j fa (go (succNat j) fas)
     {-# inline hifoldr #-}
 
@@ -175,9 +175,9 @@ instance HFoldable HList where
         go :: forall j. SNat j -> HList f (Drop j as) -> HList g (Drop j as) -> r
         go _ HNil        HNil        = z
         go j (fa :& fas) (ga :& gas) =
-            assuming (eqDropIndex  @_ @j @as) $
-            assuming (eqDropNext   @_ @j @as) $
-            assuming (leDropLength @_ @j @as) $
+            assuming (eqDropIndex  @j @as) $
+            assuming (eqDropNext   @j @as) $
+            assuming (leDropLength @j @as) $
                 f j fa ga (go (succNat j) fas gas)
     {-# inline hifoldr2 #-}
 

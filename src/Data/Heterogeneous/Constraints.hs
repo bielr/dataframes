@@ -43,7 +43,7 @@ type All c as = Tupled (Map c as)
 
 
 type AllF :: forall k j. (j -> Constraint) -> (k -> j) -> [k] -> Constraint
-type AllF c f as = All c (Map f as)
+type AllF c f as = All (ComposeC c f) as
 
 
 constrained :: forall c as r i.
@@ -52,8 +52,8 @@ constrained :: forall c as r i.
     -> SNat i
     -> r
 constrained r =
-    assuming (eqMapLength @_ @_ @c @as) $ \i ->
-    assuming (eqMapIndex @_ @_ @c @as @i) $
+    assuming (eqMapLength @c @as) \i ->
+    assuming (eqMapIndex @c @as @i) $
         instAt @(Map c as) i r
 {-# inline constrained #-}
 
@@ -64,7 +64,7 @@ iconstrained :: forall c as r i.
     -> SNat i
     -> r
 iconstrained f =
-    assuming (eqMapLength @_ @_ @c @as) $ \i ->
-    assuming (eqMapIndex @_ @_ @c @as @i) $
+    assuming (eqMapLength @c @as) \i ->
+    assuming (eqMapIndex @c @as @i) $
         instAt @(Map c as) i (f i)
 {-# inline iconstrained #-}

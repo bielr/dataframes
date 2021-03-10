@@ -4,7 +4,7 @@
 {-# language UndecidableInstances #-}
 module Data.Frame.Field
   ( Field(..)
-  , fieldValue
+  , field
   , renamed
   , renamedTo
   ) where
@@ -74,9 +74,9 @@ instance RemoveBoilerplate Field where
     complicate = Field
 
 
-fieldValue :: forall s a b. Iso (Field (s :> a)) (Field (s :> b)) a b
-fieldValue = L.coerced
-{-# inline fieldValue #-}
+field :: forall s a b. Iso (Field (s :> a)) (Field (s :> b)) a b
+field = L.coerced
+{-# inline field #-}
 
 
 renamed :: forall s t a. Iso' (Field (s :> a)) (Field (t :> a))

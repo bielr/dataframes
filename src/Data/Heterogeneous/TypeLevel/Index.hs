@@ -105,41 +105,41 @@ type family Drop i as where
 --     MapHKD f (x ': xs) = HKD f x ': MapHKD f xs
 
 
-eqMapIndex :: forall k j (f :: k -> j) as i.
+eqMapIndex :: forall {k} {j} (f :: k -> j) as i.
     i < Length as
     => (Map f as !! i) :~: f (as !! i)
 eqMapIndex = unsafeCoerce (Refl @(f (as !! i)))
 {-# inline eqMapIndex #-}
 
 
-eqMapLength :: forall k j (f :: k -> j) as.
+eqMapLength :: forall {k} {j} (f :: k -> j) as.
     Length as :~: Length (Map f as)
 eqMapLength = unsafeCoerce (Refl @(Length as))
 {-# inline eqMapLength #-}
 
 
-eqDropIndex :: forall k i (as :: [k]) b bs.
+eqDropIndex :: forall {k} i (as :: [k]) b bs.
     Drop i as ~ (b ': bs)
     => b :~: (as !! i)
 eqDropIndex = unsafeCoerce (Refl @b)
 {-# inline eqDropIndex #-}
 
 
-eqDropNext :: forall k i (as :: [k]) b bs.
+eqDropNext :: forall {k} i (as :: [k]) b bs.
     Drop i as ~ (b ': bs)
     => bs :~: Drop ('Succ i) as
 eqDropNext = unsafeCoerce (Refl @bs)
 {-# inline eqDropNext #-}
 
 
-eqDropLength :: forall k n (as :: [k]).
+eqDropLength :: forall {k} n (as :: [k]).
     Drop n as ~ '[]
     => n :~: Length as
 eqDropLength = unsafeCoerce (Refl @n)
 {-# inline eqDropLength #-}
 
 
-leDropLength :: forall k i (as :: [k]) b bs.
+leDropLength :: forall {k} i (as :: [k]) b bs.
     Drop i as ~ (b ': bs)
     => Truth (i <? Length as)
 leDropLength = swear

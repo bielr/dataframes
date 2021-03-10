@@ -4,17 +4,17 @@ module Data.Heterogeneous.Class.HFoldable where
 import Data.Heterogeneous.TypeLevel
 
 
-type HFoldable :: forall k. HTyConK k -> Constraint
+type HFoldable :: forall {k}. HTyConK k -> Constraint
 
 class HFoldable hf where
-    hfoldr ::
+    hfoldr :: forall r f as.
         (forall a. f a -> r -> r)
         -> r
         -> hf f as
         -> r
     hfoldr f = hifoldr \_ -> f
 
-    hfoldr2 ::
+    hfoldr2 :: forall r f g as.
         (forall a. f a -> g a -> r -> r)
         -> r
         -> hf f as
@@ -22,18 +22,64 @@ class HFoldable hf where
         -> r
     hfoldr2 f = hifoldr2 \_ -> f
 
-    hifoldr ::
+    hifoldr :: forall r f as.
         (forall i. i < Length as => SNat i -> f (as !! i) -> r -> r)
         -> r
         -> hf f as
         -> r
 
-    hifoldr2 ::
+    hifoldr2 :: forall r f g as.
         (forall i. i < Length as => SNat i -> f (as !! i) -> g (as !! i) -> r -> r)
         -> r
         -> hf f as
         -> hf g as
         -> r
+
+
+    hfoldl' :: forall r f as.
+        (forall a. r -> f a -> r)
+        -> r
+        -> hf f as
+        -> r
+    hfoldl' f z0 hf = hfoldr f' id hf z0
+      where
+        f' :: f a -> (r -> r) -> r -> r
+        f' fa k z = k $! f z fa
+
+
+    hifoldl' :: forall r f as.
+        (forall i. i < Length as => r -> SNat i -> f (as !! i) -> r)
+        -> r
+        -> hf f as
+        -> r
+    hifoldl' f z0 hf = hifoldr f' id hf z0
+      where
+        f' :: i < Length as => SNat i -> f (as !! i) -> (r -> r) -> r -> r
+        f' i fa k z = k $! f z i fa
+
+
+    hfoldl2' :: forall r f g as.
+        (forall a. r -> f a -> g a -> r)
+        -> r
+        -> hf f as
+        -> hf g as
+        -> r
+    hfoldl2' f z0 hf hg = hfoldr2 f' id hf hg z0
+      where
+        f' :: f a -> g a -> (r -> r) -> r -> r
+        f' fa ga k z = k $! f z fa ga
+
+
+    hifoldl2' :: forall r f g as.
+        (forall i. i < Length as => r -> SNat i -> f (as !! i) -> g (as !! i) -> r)
+        -> r
+        -> hf f as
+        -> hf g as
+        -> r
+    hifoldl2' f z0 hf hg = hifoldr2 f' id hf hg z0
+      where
+        f' :: i < Length as => SNat i -> f (as !! i) -> g (as !! i) -> (r -> r) -> r -> r
+        f' i fa ga k z = k $! f z i fa ga
 
 
 htraverse_ ::

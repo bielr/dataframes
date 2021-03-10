@@ -64,7 +64,7 @@ type i <? n = CmpPeano i n == 'LT
 type (<) :: Peano -> Peano -> Constraint
 
 class (i <? n) ~ 'True => i < n
-instance (i <? n) ~ 'True => i < n
+instance {-# incoherent #-} (i <? n) ~ 'True => i < n
 
 
 

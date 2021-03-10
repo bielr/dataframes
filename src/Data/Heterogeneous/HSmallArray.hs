@@ -14,12 +14,14 @@ import Control.Lens qualified as L
 import Control.Applicative (liftA2)
 import Control.Monad.ST (ST)
 
+import Data.Hashable (Hashable(..))
 import Data.Foldable (toList)
 
 import qualified Data.Primitive.SmallArray as SA
 
 import Unsafe.Coerce (unsafeCoerce)
 
+import Data.Heterogeneous.Constraints
 import Data.Heterogeneous.Class.HCreate
 import Data.Heterogeneous.Class.HDistributive
 import Data.Heterogeneous.Class.HFoldable
@@ -30,6 +32,7 @@ import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.Subseq
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
+import Data.Heterogeneous.TypeLevel.Subset
 
 
 -- SmallArray-based record type
@@ -48,13 +51,18 @@ hSmallArrayToList :: HSmallArray f as -> [Any]
 hSmallArrayToList (HSmallArray arr) = toList arr
 
 
+uninitializedElement :: String -> Any
+uninitializedElement origin =
+    error ("Data.Heterogeneous.HSmallArray: " ++ origin ++ ": uninitialized element")
+
+
 create :: forall as f.
     SNat (Length as)
     -> (forall i. i < Length as => SNat i -> f (as !! i))
     -> HSmallArray f as
 create n f = HSmallArray $ SA.runSmallArray do
     marr :: SA.SmallMutableArray s Any
-        <- SA.newSmallArray (snat n) (error "create: uninitialized element")
+        <- SA.newSmallArray (snat n) (uninitializedElement "create")
 
     let write :: i < Length as => SNat i -> ST s ()
         write i = SA.writeSmallArray marr (snat i) (unsafeCoerce $! f i)
@@ -69,7 +77,7 @@ createST :: forall as f s.
     -> (forall i. i < Length as => SNat i -> ST s (f (as !! i)))
     -> ST s (HSmallArray f as)
 createST n f = do
-    mutArr <- SA.newSmallArray (snat n) (error "createST: uninitialized element")
+    mutArr <- SA.newSmallArray (snat n) (uninitializedElement "createST")
 
     foldrNatInts n (\i st -> do
           !fa <- f i
@@ -95,7 +103,7 @@ createA :: forall as f g.
 createA n f =
     let newA :: NewSArr Any
         newA = NewSArr $
-            SA.newSmallArray (snat n) (error "createA: uninitialized element")
+            SA.newSmallArray (snat n) (uninitializedElement "createA")
 
         write :: forall i a. SNat i -> f a -> NewSArr Any -> NewSArr Any
         write i !fa (NewSArr marr) = NewSArr do
@@ -201,6 +209,31 @@ _setSubset (HSmallArray arr) (HSmallArray upd) =
         return marr
 
 
+instance AllF Eq f as => Eq (HSmallArray f as) where
+    (==) =
+        hifoldr2 (\i a b eq -> constrained @(ComposeC Eq f) @as (a == b) i && eq) True
+
+
+instance (AllF Eq f as, AllF Ord f as) => Ord (HSmallArray f as) where
+    compare =
+        hifoldr2 (\i a b eq -> constrained @(ComposeC Ord f) @as (compare a b) i <> eq) EQ
+
+
+instance AllF Hashable f as => Hashable (HSmallArray f as) where
+    hash =
+        hifoldl' (\h i a ->
+            case snat i of
+                0 -> constrained @(ComposeC Hashable f) @as (hash a) i
+                _ -> constrained @(ComposeC Hashable f) @as (h `hashWithSalt` a) i)
+            0
+
+    hashWithSalt =
+        hifoldl' \h i a ->
+            case snat i of
+                0 -> constrained @(ComposeC Hashable f) @as (hash a) i
+                _ -> constrained @(ComposeC Hashable f) @as (h `hashWithSalt` a) i
+
+
 instance
     ( KnownPeano i
     , (as !! i) ~ a
@@ -238,6 +271,20 @@ instance HMonoid HSmallArray where
 
     happend (HSmallArray as) (HSmallArray bs) = HSmallArray (as <> bs)
     {-# inline happend #-}
+
+    hcons fa (HSmallArray arr) = HSmallArray $ SA.runSmallArray do
+        marr' <- SA.newSmallArray (SA.sizeofSmallArray arr + 1) (uninitializedElement "hcons")
+        SA.writeSmallArray marr' 0 $! unsafeCoerce fa
+        SA.copySmallArray marr' 1 arr 0 (SA.sizeofSmallArray arr)
+        return marr'
+    {-# inline hcons #-}
+
+    hsnoc (HSmallArray arr) fa = HSmallArray $ SA.runSmallArray do
+        marr' <- SA.newSmallArray (SA.sizeofSmallArray arr + 1) (uninitializedElement "hcons")
+        SA.copySmallArray marr' 0 arr 0 (SA.sizeofSmallArray arr)
+        SA.writeSmallArray marr' (SA.sizeofSmallArray arr) $! unsafeCoerce fa
+        return marr'
+    {-# inline hsnoc #-}
 
 
 instance KnownLength as => HCreate HSmallArray as where

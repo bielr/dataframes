@@ -36,6 +36,7 @@ type FieldType :: FieldK -> Type
 type family FieldType col where
     FieldType (_ :> t) = t
 
+
 type FieldsK = [FieldK]
 type RecK = (FieldK -> Type) -> FieldsK -> Type
 

@@ -1,9 +1,17 @@
 {-# language UndecidableInstances #-}
 module Data.Frame.TypeIndex where
 
-import Data.Vinyl.Derived   as Vinyl (FieldType)
-
 import Data.Frame.Kind
+
+
+type FindField :: Symbol -> FieldsK -> FieldK
+type family FindField s rs where
+    FindField s ((s :> a) ': rs) = s :> a
+    FindField s (r ': rs)        = FindField s rs
+
+
+type FindFieldType :: Symbol -> FieldsK -> Type
+type FindFieldType s rs = FieldType (FindField s rs)
 
 
 -- type-level polymorphic field indexers
@@ -11,18 +19,18 @@ import Data.Frame.Kind
 -- Specifying one or more field(s) by name(s) or full spec(s)
 -- Polymorphic on both spec and result list-ness
 
-type ProjField :: forall ki -> forall kr -> FieldsK -> ki -> kr
+type ProjField :: forall (ki :: Type) -> forall (kr :: Type) -> FieldsK -> ki -> kr
 
 type family ProjField (ki :: Type) (kr :: Type) (rs :: FieldsK) (i :: ki) :: kr where
-    ProjField (Symbol, Type) (Symbol, Type)  rs  '(s, a)   = '(s, a)
-    ProjField Symbol         (Symbol, Type)  rs  s         = '(s, FieldType s rs)
-    ProjField (Symbol, Type) Symbol          rs  '(s, a)   = s
-    ProjField Symbol         Symbol          rs  s         = s
-    ProjField (Symbol, Type) [kr]            rs  '(s, a)   = ProjField [(Symbol, Type)] [kr] rs '[ '(s, a)]
-    ProjField Symbol         [kr]            rs  s         = ProjField [Symbol]         [kr] rs '[s]
-    ProjField [k]            [k]             rs  r         = r
-    ProjField [ki]           [kr]            rs  '[]       = '[]
-    ProjField [ki]           [kr]            rs  (i ': is) = ProjField ki kr rs i ': ProjField [ki] [kr] rs is
+    ProjField FieldK  FieldK  rs  (s :> a)  = s :> a
+    ProjField Symbol  FieldK  rs  s         = FindField s rs
+    ProjField FieldK  Symbol  rs  (s :> a)  = s
+    ProjField Symbol  Symbol  rs  s         = s
+    ProjField FieldK  [kr]    rs  (s :> a)  = ProjField [FieldK] [kr] rs '[s :> a]
+    ProjField Symbol  [kr]    rs  s         = ProjField [Symbol] [kr] rs '[s]
+    ProjField [k]     [k]     rs  r         = r
+    ProjField [ki]    [kr]    rs  '[]       = '[]
+    ProjField [ki]    [kr]    rs  (i ': is) = ProjField ki kr rs i ': ProjField [ki] [kr] rs is
 
 
 type FieldSpec :: forall ki kr. FieldsK -> ki -> kr -> Constraint
@@ -30,7 +38,7 @@ type FieldSpec rs (i :: ki) (r :: kr) = ProjField ki kr rs i ~ r
 
 
 -- Specifying one or more field(s) by name(s) or full spec(s)
--- The list-ness of the spect determines the list-ness of the output
+-- The list-ness of the spec determines the list-ness of the output
 
 type InferFieldKind :: Type -> Type
 
@@ -46,7 +54,7 @@ type MonoFieldSpec rs (i :: ki) (r :: kr) = (InferFieldKind ki ~ kr, ProjField k
 -- Specifying one or more field name(s) by name(s) or full spec(s)
 -- Polymorphic on both spec and result list-ness
 
-type ProjName :: forall ki -> forall kr -> ki -> kr
+type ProjName :: forall (ki :: Type) -> forall (kr :: Type) -> ki -> kr
 
 type family ProjName (ki :: Type) (kr :: Type) (i :: ki) :: kr where
     ProjName Symbol          Symbol s         = s

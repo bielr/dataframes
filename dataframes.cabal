@@ -32,6 +32,7 @@ common shared-properties
       ConstraintKinds
       DataKinds
       DefaultSignatures
+      DerivingStrategies
       EmptyCase
       ExplicitNamespaces
       FlexibleContexts
@@ -67,11 +68,13 @@ common shared-properties
     , distributive
     , first-class-families
     , ghc-prim
+    , hashable
     , lens
     , primitive
     , profunctors
     , tagged
     , template-haskell
+    , hashtables
     , text
     , type-errors
     , vector
@@ -82,10 +85,13 @@ library
   import: shared-properties
   exposed-modules:
       Control.Rowwise
-      Data.Frame.Kind
+      Data.Frame.DataTypes.Vector
       Data.Frame.Field
-      Data.Frame.Internal.ColVector
       Data.Frame.Impl.ColVectors
+      Data.Frame.TH.Expr
+      Data.Frame.Class
+      Data.Frame.Kind
+      Data.Frame.TypeIndex
       Data.Functor.Boilerplate
       Data.Heterogeneous
       Data.Heterogeneous.Class.HCreate

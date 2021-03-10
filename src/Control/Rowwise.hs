@@ -1,14 +1,21 @@
 {-# language DeriveFunctor #-}
 module Control.Rowwise
   ( Rowwise
-  , global
+  , runRowwise
+  , unsafeRowwise
+  , withCtx
+  , rowid
   ) where
 
 import Data.Profunctor.Unsafe
 
 
-newtype Rowwise ctx a = Rowwise (ctx -> Int -> a)
+newtype Rowwise ctx a = Rowwise { runRowwise :: ctx -> Int -> a }
     deriving (Functor)
+
+
+unsafeRowwise :: (ctx -> Int -> a) -> Rowwise ctx a
+unsafeRowwise = Rowwise
 
 
 instance Applicative (Rowwise ctx) where
@@ -29,10 +36,14 @@ instance Profunctor Rowwise where
     Rowwise cixa .# l = Rowwise (cixa .# l)
 
 
-global :: (df -> a) -> Rowwise df a
-global f = Rowwise \df ->
-    let !a = f df
+withCtx :: (ctx -> a) -> Rowwise ctx a
+withCtx f = Rowwise \ctx ->
+    let !a = f ctx
     in const a
+
+
+rowid :: Rowwise ctx Int
+rowid = Rowwise \_ -> id
 
 
 -- colIx :: When (rep == 'Vec) (ColType col) => Col rep col -> Int -> Snd col
@@ -46,11 +57,11 @@ global f = Rowwise \df ->
 --     , col' ~ '(s, a)
 --     )
 --     => Frame rep by rec cols -> Rowwise (Frame rep by rec cols) a -> Col rep '(s, a)
--- runColIx df (Rowwise dfixa) =
---     let !g = dfixa df
+-- runColIx ctx (Rowwise dfixa) =
+--     let !g = dfixa ctx
 --     in
---         case df of
---           RowsVec _   -> generateCol $ Indexer (nrows df) g
---           RowsGen _   -> generateCol $ Indexer (nrows df) g
---           ColVecs _ _ -> generateCol $ Indexer (nrows df) g
---           ColGens _ _ -> generateCol $ Indexer (nrows df) g
+--         case ctx of
+--           RowsVec _   -> generateCol $ Indexer (nrows ctx) g
+--           RowsGen _   -> generateCol $ Indexer (nrows ctx) g
+--           ColVecs _ _ -> generateCol $ Indexer (nrows ctx) g
+--           ColGens _ _ -> generateCol $ Indexer (nrows ctx) g

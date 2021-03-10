@@ -19,6 +19,14 @@ class HMonoid hf where
     hempty :: hf f '[]
     happend :: hf f as -> hf f bs -> hf f (as ++ bs)
 
-    hcons :: HSingleton hf => f a -> hf f as -> hf f (a ': as)
+    hcons :: f a -> hf f as -> hf f (a ': as)
+    hsnoc :: hf f as -> f a -> hf f (as ++ '[a])
+
+    default hcons :: HSingleton hf => f a -> hf f as -> hf f (a ': as)
     hcons = happend . review hsingleton
     {-# inline hcons #-}
+
+    default hsnoc :: HSingleton hf => hf f as -> f a -> hf f (as ++ '[a])
+    hsnoc hf fa = happend hf (review hsingleton fa)
+    {-# inline hsnoc #-}
+

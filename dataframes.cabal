@@ -85,15 +85,16 @@ library
   import: shared-properties
   exposed-modules:
       Control.Rowwise
+      Data.Frame.Class
       Data.Frame.DataTypes.Vector
       Data.Frame.Field
       Data.Frame.Impl.ColVectors
-      Data.Frame.TH.Expr
-      Data.Frame.Class
       Data.Frame.Kind
+      Data.Frame.TH.Expr
       Data.Frame.TypeIndex
       Data.Functor.Boilerplate
       Data.Heterogeneous
+      Data.Heterogeneous.Class.HConv
       Data.Heterogeneous.Class.HCreate
       Data.Heterogeneous.Class.HDistributive
       Data.Heterogeneous.Class.HFoldable
@@ -103,6 +104,8 @@ library
       Data.Heterogeneous.Class.Member
       Data.Heterogeneous.Class.Subseq
       Data.Heterogeneous.Class.Subset
+      Data.Heterogeneous.Class.TupleView
+      Data.Heterogeneous.Class.TupleView.TH
       Data.Heterogeneous.Constraints
       Data.Heterogeneous.Constraints.TH
       Data.Heterogeneous.Constraints.Tupled
@@ -110,6 +113,9 @@ library
       Data.Heterogeneous.Functors
       Data.Heterogeneous.HList
       Data.Heterogeneous.HSmallArray
+      Data.Heterogeneous.HTuple
+      Data.Heterogeneous.HTuple.HTuple
+      Data.Heterogeneous.HTuple.HTupleInstances
       Data.Heterogeneous.TypeLevel
       Data.Heterogeneous.TypeLevel.Index
       Data.Heterogeneous.TypeLevel.Kind

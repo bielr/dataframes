@@ -1,4 +1,6 @@
+{-# options_ghc -ddump-splices #-}
 {-# language UndecidableInstances #-}
+{-# language TemplateHaskell #-}
 module Data.Heterogeneous.HList where
 
 import GHC.TypeLits
@@ -7,6 +9,7 @@ import Control.Applicative (liftA2)
 import Control.Lens.Type
 import Control.Lens qualified as L
 import Data.Profunctor.Unsafe
+import Data.Traversable (forM)
 
 import Data.Heterogeneous.Functors
 import Data.Heterogeneous.Class.Member
@@ -16,8 +19,12 @@ import Data.Heterogeneous.Class.HFunctor
 import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.HTraversable
 import Data.Heterogeneous.Class.Subseq
+import Data.Heterogeneous.HTuple.HTuple (HTuple(..))
+import Data.Heterogeneous.Class.TupleView
+import Data.Heterogeneous.Class.TupleView.TH
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
+
 
 
 type HList :: forall k. HTyConK k
@@ -294,3 +301,26 @@ instance
         consr r (!ss, !rs') = (ss, r :& rs')
     {-# inline hsubseqSplitC #-}
 
+
+
+instance TupleView HList '[] where
+    htupleWith _ HNil = HTuple ()
+    htupleWithC _ HNil = HTuple ()
+    fromHTuple (HTuple ()) = HNil
+
+$(concat <$> forM [1..24] \n -> do
+    cxt <- htupleInstanceContext n
+
+    let recPat   = foldr (\a as -> [p| $a :& $as |]) [p| HNil |] (gen_aPats cxt)
+        recExp g = foldr
+                    (\(aTy, aE) as -> [| $(g aTy aE) :& $as |])
+                    [| HNil |]
+                    (zip (gen_aTys cxt) (gen_aExps cxt))
+
+    [d|
+        instance TupleView HList $(gen_listTy cxt) where
+            htupleWith  h $recPat = $(gen_tupExp cxt \_ fa -> [| h $fa |])
+            htupleWithC h $recPat = $(gen_tupExp cxt \_ fa -> [| h $fa |])
+
+            fromHTuple $(gen_tupPat cxt) = $(recExp \_ fa -> fa)
+      |])

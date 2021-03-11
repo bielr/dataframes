@@ -1,39 +1,27 @@
 {-# language UndecidableInstances #-}
 module Data.Heterogeneous.Class.HConv where
 
-import GHC.Exts (Any)
-
 import Control.Lens (view)
 
-import qualified Data.Primitive.SmallArray as SA
-
-import Unsafe.Coerce (unsafeCoerce)
-
-import Data.Heterogeneous.RIxed
-import Data.Heterogeneous.RNew
+import Data.Heterogeneous.TypeLevel.Kind
+import Data.Heterogeneous.Class.HCreate
+import Data.Heterogeneous.Class.Member
 
 
 -- Conversion between record types
 
-type HConv :: forall k. HTyConK k -> HTyConK k -> Constraint
+type HConv :: forall {k}. HTyConK k -> HTyConK k -> [k] -> Constraint
 
 class HConv hf hg as where
     hconv :: hf f as -> hg f as
 
+    default hconv :: (HIxed hf, HCreate hg as) => hf f as -> hg f as
+    hconv hf = hcreate \i -> view (hix i) hf
 
-instance KnownLength as => HConv HList HSmallArray as where
-    hconv = HSA.unsafeFromListN getSNat . toAnys
-      where
-        toAnys :: HList f as -> [Any]
-        toAnys HNil      = []
-        toAnys (a :& as) = unsafeCoerce a : toAnys as
-    {-# inline hconv #-}
 
+hconvTo :: forall hg hf f as. HConv hf hg as => hf f as -> hg f as
+hconvTo = hconv
 
 instance {-# overlappable #-} HConv hf hf as where
     hconv = id
-    {-# inline hconv #-}
-
-instance {-# overlappable #-} (HIxed hf, HNew HList as) => HConv hf HList as where
-    hconv hf = rcreate (\i -> view (hix i) hf)
     {-# inline hconv #-}

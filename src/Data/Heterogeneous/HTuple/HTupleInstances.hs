@@ -3,9 +3,9 @@
 {-# language QuantifiedConstraints #-}
 {-# language TemplateHaskell #-}
 {-# language ViewPatterns #-}
-module Data.Heterogeneous.HTuple.RTupledInstances () where
+module Data.Heterogeneous.HTuple.HTupleInstances () where
 
-import Data.Heterogeneous.RTupled.TH
+-- import Data.Heterogeneous.Class.TupleView.TH
 
 
-$(generateRTupledInstancesFromTo 1 62)
+-- $(generateHTupledInstancesFromTo 1 32)

@@ -22,6 +22,7 @@ import qualified Data.Primitive.SmallArray as SA
 import Unsafe.Coerce (unsafeCoerce)
 
 import Data.Heterogeneous.Constraints
+import Data.Heterogeneous.Class.HConv
 import Data.Heterogeneous.Class.HCreate
 import Data.Heterogeneous.Class.HDistributive
 import Data.Heterogeneous.Class.HFoldable
@@ -30,6 +31,7 @@ import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.HTraversable
 import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.Subseq
+import Data.Heterogeneous.HList qualified as HList
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
 import Data.Heterogeneous.TypeLevel.Subset
@@ -396,3 +398,18 @@ instance
     {-# inlinable hsubseqSplitC #-}
 
 
+instance KnownLength as => HConv HList.HList HSmallArray as where
+    hconv :: forall f. HList.HList f as -> HSmallArray f as
+    hconv hlist = HSmallArray $ SA.runSmallArray do
+        marr :: SA.SmallMutableArray s Any
+            <- SA.newSmallArray (peanoInt @(Length as)) (uninitializedElement "hconv @HList")
+
+        let go :: Int -> HList.HList f bs -> ST s ()
+            go !_ HList.HNil        = return ()
+            go !i (fa HList.:& fas) = do
+                SA.writeSmallArray marr i $! unsafeCoerce fa
+                go (i+1) fas
+
+        go 0 hlist
+        return marr
+    {-# inline hconv #-}

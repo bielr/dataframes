@@ -1,14 +1,9 @@
-{-# language AllowAmbiguousTypes #-}
-{-# language QuantifiedConstraints #-}
-{-# language UndecidableInstances #-}
-{-# language UndecidableSuperClasses #-}
 {-# language TemplateHaskell #-}
 module Data.Heterogeneous.HTuple.HTuple where
 
 import GHC.Tuple (Solo)
 import Data.Heterogeneous.TypeLevel
 import Language.Haskell.TH qualified as TH
-
 
 
 $(do
@@ -57,5 +52,4 @@ newtype HTuple f as = HTuple { getHTuple :: TupleOf (Map f as) }
 
 type IsTupleOf :: [Type] -> Type -> Constraint
 type IsTupleOf as = AppliedTyCon as (TupleTyCon (Length as))
-
 

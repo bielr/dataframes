@@ -10,66 +10,9 @@ import Control.Monad
 import Data.Foldable (foldl')
 
 import Language.Haskell.TH
-import Data.Heterogeneous.HTuple.HTuple (HTuple(..))
+import Data.Heterogeneous.HTuple (HTuple(..))
 
 
-data GenHTupleCxt = GenHTupleCxt
-    { gen_fTy       :: TypeQ   -- f
-    , gen_aTys      :: [TypeQ] -- a1, a2  tyvars
-    , gen_listTy    :: TypeQ   -- [a1, a2, ...] type
-
-    , gen_aExps     :: [ExpQ]  -- fa1 fa2 vars
-    , gen_aPats     :: [PatQ]  -- fa1 fa2 patterns
-
-    , gen_tupTy     :: (TypeQ -> TypeQ) -> TypeQ -- (f a1, f a2..,) type
-    , gen_tupPat    :: PatQ -- (fa1, fa2..,) pattern
-    , gen_tupExp    :: (TypeQ -> ExpQ -> ExpQ) -> ExpQ -- ((a1, fa1) -> tuple element exp) -> tuple exp
-    }
-
-
-htupleInstanceContext :: Int -> Q GenHTupleCxt
-htupleInstanceContext n = do
-    fTyName <- newName "f"
-    let fTy = varT fTyName
-
-    aTyNames <- replicateM n (newName "a")
-    let aTys = map varT aTyNames
-
-    aVarNames <- replicateM n (newName "a")
-    let aPats = map varP aVarNames
-        aExps = map varE aVarNames
-
-    let listTy   = foldr (\a as -> [t| $a ': $as |]) [t| '[]  |] aTys
-
-    --  recPat   = foldr (\a as -> [p| $a :& $as |]) [p| RNil |] aPats
-    --  recExp g = foldr (\(aTy, aE) as -> [e| $(g aTy aE) :& $as |]) [e| RNil |] (zip aTys aExps)
-
-    let tupTy f
-          | n == 0    = [t| () |]
-          | n == 1    = foldl' appT [t|Solo|] (map f aTys)
-          | otherwise = foldl' appT (tupleT n) (map f aTys)
-        tupPat
-          | n == 0    = [p| () |]
-          | n == 1    = conP 'Solo (map bangP aPats)
-          | otherwise = tupP (map bangP aPats)
-        tupExp g
-          | n == 0    = [e| () |]
-          | n == 1    = foldl' appE [|Solo|] (zipWith g aTys aExps)
-          | otherwise = tupE (zipWith g aTys aExps)
-
-
-    return GenHTupleCxt
-        { gen_fTy = fTy
-        , gen_aTys = aTys
-        , gen_listTy = listTy
-
-        , gen_aPats = aPats
-        , gen_aExps = aExps
-
-        , gen_tupTy = tupTy
-        , gen_tupPat = [p| HTuple $tupPat |]
-        , gen_tupExp = \g -> [e| HTuple $(tupExp g) |]
-        }
 
 
 {-

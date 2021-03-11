@@ -105,7 +105,6 @@ library
       Data.Heterogeneous.Class.Subseq
       Data.Heterogeneous.Class.Subset
       Data.Heterogeneous.Class.TupleView
-      Data.Heterogeneous.Class.TupleView.TH
       Data.Heterogeneous.Constraints
       Data.Heterogeneous.Constraints.TH
       Data.Heterogeneous.Constraints.Tupled
@@ -114,8 +113,7 @@ library
       Data.Heterogeneous.HList
       Data.Heterogeneous.HSmallArray
       Data.Heterogeneous.HTuple
-      Data.Heterogeneous.HTuple.HTuple
-      Data.Heterogeneous.HTuple.HTupleInstances
+      Data.Heterogeneous.HTuple.TH
       Data.Heterogeneous.TypeLevel
       Data.Heterogeneous.TypeLevel.Index
       Data.Heterogeneous.TypeLevel.Kind
@@ -125,7 +123,10 @@ library
       Data.Heterogeneous.TypeLevel.Subseq
       Data.Heterogeneous.TypeLevel.Subset
       Data.Indexer
-  other-modules: Paths_dataframes
+  other-modules:
+      Paths_dataframes
+      Data.Heterogeneous.HTuple.HTuple
+      Data.Heterogeneous.HTuple.HTupleInstances
   hs-source-dirs: src
 
 executable dataframes-exe

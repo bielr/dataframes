@@ -1,23 +1,22 @@
 {-# language AllowAmbiguousTypes #-}
 {-# language RoleAnnotations #-}
-{-# language StrictData #-}
 {-# language UndecidableInstances #-}
+{-# language TemplateHaskell #-}
 module Data.Heterogeneous.HSmallArray
   ( HSmallArray
   , unsafeHSmallArrayFromListN
   , hSmallArrayToList
   ) where
 
-import GHC.Exts (Any)
-
-import Control.Lens qualified as L
 import Control.Applicative (liftA2)
+import Control.Lens qualified as L
 import Control.Monad.ST (ST)
-
-import Data.Hashable (Hashable(..))
 import Data.Foldable (toList)
-
-import qualified Data.Primitive.SmallArray as SA
+import Data.Hashable (Hashable(..))
+import Data.Primitive.SmallArray qualified as SA
+import Data.Traversable (forM)
+import GHC.Exts (Any)
+import Language.Haskell.TH qualified as TH
 
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -31,7 +30,9 @@ import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.HTraversable
 import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.Subseq
+import Data.Heterogeneous.Class.TupleView
 import Data.Heterogeneous.HList qualified as HList
+import Data.Heterogeneous.HTuple.TH
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
 import Data.Heterogeneous.TypeLevel.Subset
@@ -171,14 +172,14 @@ unsafeIndexAll (HSmallArray arr) =
                 map (SA.indexSmallArray arr) (peanoInts @is)
 
 
-getSubseq :: forall ss rs f.
-    ( IsSubseqWithError ss rs
-    , KnownPeanos (IndexesOfSubseq ss rs)
+getSubseq :: forall is ss rs f.
+    ( IsSubseqI ss rs is
+    , KnownPeanos is
     , KnownLength ss
     )
     => HSmallArray f rs
     -> HSmallArray f ss
-getSubseq = unsafeIndexAll @(IndexesOfSubseq ss rs)
+getSubseq = unsafeIndexAll @is
 
 
 _getSubset :: forall ss rs f.
@@ -249,7 +250,7 @@ instance
     ( KnownPeano i
     , HGetI HSmallArray a as i
     , HGetI HSmallArray b bs i
-    , ReplaceSubseq '[a] '[b] as bs '[i]
+    , ReplaceSubseqI '[a] '[b] as bs '[i]
     )
     => HSetI HSmallArray a b as bs i where
 
@@ -329,15 +330,17 @@ instance KnownLength as => HDistributive HSmallArray as
 
 
 instance
-    ( ReplaceSubseqWithError ss ss' rs rs'
-    , is ~ IndexesOfSubseq ss rs
+    ( ReplaceSubseqI ss ss' rs rs' is
+    -- ReplaceSubseqWithError ss ss' rs rs'
+    --, is ~ IndexesOfSubseq ss rs
+    --, IndexAll rs is ~ ss
     , KnownLength ss
     , KnownLength rs'
     , KnownPeanos is
     )
     => HSubseqI HSmallArray ss ss' rs rs' is where
 
-    hsubseqC = L.lens getSubseq \(HSmallArray ars) (HSmallArray ass') ->
+    hsubseqC = L.lens (getSubseq @is) \(HSmallArray ars) (HSmallArray ass') ->
         let
           replace :: Int -> [Int] -> [Any] -> [Any] -> [Any]
           replace !_ _  rs []  = rs
@@ -355,9 +358,14 @@ instance
     {-# inlinable hsubseqC #-}
 
 
+_testSubseqInstance :: ()
+_testSubseqInstance = testSubseqInstance @HSmallArray
+
+
 instance
-    ( ReplaceSubseqWithError ss '[] rs rs'
-    , is ~ IndexesOfSubseq ss rs
+    ( ReplaceSubseqI ss '[] rs rs' is
+    -- ReplaceSubseqWithError ss '[] rs rs'
+    --, is ~ IndexesOfSubseq ss rs
     , KnownLength ss
     , KnownLength rs
     , KnownLength rs'
@@ -413,3 +421,22 @@ instance KnownLength as => HConv HList.HList HSmallArray as where
         go 0 hlist
         return marr
     {-# inline hconv #-}
+
+
+$(concat <$> forM [1..16] \n -> do
+    cxt <- htupleInstanceContext n
+
+    [d|
+        instance TupleView HSmallArray $(gen_listTy cxt) where
+            htupleWith  h arr =
+                $(gen_tupExp' cxt \i ty _ -> [| h @($ty) (index arr (getSNat @($(peanoTys !! i)))) |])
+            {-# inline htupleWith #-}
+            htupleWithC h arr =
+                $(gen_tupExp' cxt \i ty _ -> [| h @($ty) (index arr (getSNat @($(peanoTys !! i)))) |])
+            {-# inline htupleWithC #-}
+
+            fromHTuple $(gen_tupPat cxt) =
+                unsafeHSmallArrayFromListN (getSNat @($(peanoTys !! n))) $
+                    $(TH.listE [ [e| unsafeCoerce $aE |] | aE <- gen_aExps cxt])
+            {-# inline fromHTuple #-}
+      |])

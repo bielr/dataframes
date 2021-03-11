@@ -19,9 +19,9 @@ type HSetI :: forall {k}. HTyConK k -> k -> k -> [k] -> [k] -> Peano -> Constrai
 class
     ( HGetI hf r rs i
     , HGetI hf r' rs' i
-    , ReplaceSubseq '[r] '[r'] rs rs' '[i]
+    , ReplaceSubseqI '[r] '[r'] rs rs' '[i]
     )
-    => HSetI hf r r' rs rs' i where
+    => HSetI hf r r' rs rs' i | rs r' i -> rs', rs' r i -> rs where
 
     hsetC :: f r' -> hf f rs -> hf f rs'
 
@@ -51,7 +51,7 @@ hmember :: forall r r' rs rs' f g hf.
     (Functor g, HSet hf r r' rs rs')
     => (f r -> g (f r'))
     -> hf f rs -> g (hf f rs')
-hmember = hmemberC
+hmember = hmemberC @_ @_ @_ @_ @_ @(IndexOf r rs)
 
 
 -- (efficient) indexed access to the elements of an heterogeneous sequence

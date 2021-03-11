@@ -4,9 +4,9 @@ module Data.Heterogeneous.TypeLevel.Subseq
   , DecSeq
   , IndexesOf
   , IndexesOfSubseq
-  , IsSubseq
+  , IsSubseqI
   , IsSubseqWithError
-  , ReplaceSubseq
+  , ReplaceSubseqI
   , ReplaceSubseqWithError
   ) where
 
@@ -54,25 +54,26 @@ type IndexesOfSubseqMonotoneError as bs =
     ':<>: 'ShowType bs
 
 
-type IsSubseq :: forall k. [k] -> [k] -> [Peano] -> Constraint
+type IsSubseqI :: forall k. [k] -> [k] -> [Peano] -> Constraint
 
-class is ~ IndexesOfSubseq ss rs => IsSubseq ss rs is | is rs -> ss
+--class is ~ IndexesOfSubseq ss rs => IsSubseqI ss rs is | is rs -> ss
+class IsSubseqI ss rs is | is rs -> ss
 
-instance IsSubseq '[] rs '[]
+instance IsSubseqI '[] rs '[]
 
 instance
-    ( IsSubseq ss rs dec_is
+    ( IsSubseqI ss rs dec_is
     , IncSeq dec_is ~ is
     , s ~ r
     )
-    => IsSubseq (s ': ss) (r ': rs) ('Zero ': is)
+    => IsSubseqI (s ': ss) (r ': rs) ('Zero ': is)
 
 instance
-    ( IsSubseq ss rs (i ': dec_is)
+    ( IsSubseqI ss rs (i ': dec_is)
     , IncSeq dec_is ~ is
-    , IndexesOfSubseq ss (r ': rs) ~ IncSeq (IndexesOfSubseq ss rs)
+    --, IndexesOfSubseq ss (r ': rs) ~ IncSeq (IndexesOfSubseq ss rs)
     )
-    => IsSubseq ss (r ': rs) ('Succ i ': is)
+    => IsSubseqI ss (r ': rs) ('Succ i ': is)
 
 
 type IsSubseqWithError :: forall k. [k] -> [k] -> Constraint
@@ -82,15 +83,15 @@ type IsSubseqWithError ss rs =
         (Pure
             (WhenStuck (ForcePeanos (IndexesOfSubseq ss rs))
                 (DelayError (IndexesOfSubseqMonotoneError ss rs))))
-    , IsSubseq ss rs (IndexesOfSubseq ss rs)
+    , IsSubseqI ss rs (IndexesOfSubseq ss rs)
     )
 
 
 -- Replacing ss with ss' in rs yields rs'
 
-type ReplaceSubseq :: forall k. [k] -> [k] -> [k] -> [k] -> [Peano] -> Constraint
+type ReplaceSubseqI :: forall k. [k] -> [k] -> [k] -> [k] -> [Peano] -> Constraint
 
-class IsSubseq ss rs is => ReplaceSubseq ss ss' rs rs' is
+class IsSubseqI ss rs is => ReplaceSubseqI ss ss' rs rs' is
     | is rs -> ss
     , is ss rs' -> rs
     , is ss' rs -> rs'
@@ -99,50 +100,50 @@ class IsSubseq ss rs is => ReplaceSubseq ss ss' rs rs' is
 -- trivial case
 
 instance (rs ~ rs')
-    => ReplaceSubseq '[] '[] rs rs' '[]
+    => ReplaceSubseqI '[] '[] rs rs' '[]
 
 -- insert ss' at head
 
 instance
-    ( ReplaceSubseq '[] ss' rs rs' '[]
+    ( ReplaceSubseqI '[] ss' rs rs' '[]
     , s' ~ r'
     )
-    => ReplaceSubseq '[] (s' ': ss') rs (r' ': rs') '[]
+    => ReplaceSubseqI '[] (s' ': ss') rs (r' ': rs') '[]
 
 -- delete ss
 
 instance
-    ( ReplaceSubseq ss '[] rs rs' dec_is
+    ( ReplaceSubseqI ss '[] rs rs' dec_is
     , IncSeq dec_is ~ is
     --, IndexesOfSubseq ss (r ': rs) ~ is
     , s ~ r
     )
-    => ReplaceSubseq (s ': ss) '[] (r ': rs) rs' ('Zero ': is)
+    => ReplaceSubseqI (s ': ss) '[] (r ': rs) rs' ('Zero ': is)
 
 -- replace non-empty ss with non-empty ss'
 
 instance
-    ( ReplaceSubseq ss ss' rs rs' dec_is
+    ( ReplaceSubseqI ss ss' rs rs' dec_is
     , IncSeq dec_is ~ is
     --, IndexesOfSubseq ss (r ': rs) ~ is
     , s ~ r
     , s' ~ r'
     )
-    => ReplaceSubseq (s ': ss) (s' ': ss') (r ': rs) (r' ': rs') ('Zero ': is) where
+    => ReplaceSubseqI (s ': ss) (s' ': ss') (r ': rs) (r' ': rs') ('Zero ': is) where
 
 instance
-    ( ReplaceSubseq ss ss' rs rs' (i ': dec_is)
+    ( ReplaceSubseqI ss ss' rs rs' (i ': dec_is)
     , IncSeq dec_is ~ is
-    , IndexesOfSubseq ss  (r ': rs) ~ IncSeq (IndexesOfSubseq ss rs)
+    --, IndexesOfSubseq ss  (r ': rs) ~ IncSeq (IndexesOfSubseq ss rs)
     , r ~ r'
     )
-    => ReplaceSubseq ss ss' (r ': rs) (r' ': rs') ('Succ i ': is) where
+    => ReplaceSubseqI ss ss' (r ': rs) (r' ': rs') ('Succ i ': is) where
 
 
 type ReplaceSubseqWithError :: forall k. [k] -> [k] -> [k] -> [k] -> Constraint
 type ReplaceSubseqWithError ss ss' rs rs' =
     ( IsSubseqWithError ss rs
-    , ReplaceSubseq ss ss' rs rs' (IndexesOfSubseq ss rs)
+    , ReplaceSubseqI ss ss' rs rs' (IndexesOfSubseq ss rs)
     )
 
 

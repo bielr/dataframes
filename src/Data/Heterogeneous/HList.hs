@@ -1,4 +1,3 @@
-{-# options_ghc -ddump-splices #-}
 {-# language UndecidableInstances #-}
 {-# language TemplateHaskell #-}
 module Data.Heterogeneous.HList where
@@ -19,9 +18,9 @@ import Data.Heterogeneous.Class.HFunctor
 import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.HTraversable
 import Data.Heterogeneous.Class.Subseq
-import Data.Heterogeneous.HTuple.HTuple (HTuple(..))
 import Data.Heterogeneous.Class.TupleView
-import Data.Heterogeneous.Class.TupleView.TH
+import Data.Heterogeneous.HTuple (HTuple(..))
+import Data.Heterogeneous.HTuple.TH
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
 
@@ -32,6 +31,8 @@ type HList :: forall k. HTyConK k
 data HList f as where
     HNil :: HList f '[]
     (:&) :: !(f a) -> !(HList f as) -> HList f (a ': as)
+
+infixr 5 :&
 
 
 hhead :: Lens (HList f (a ': as)) (HList f (b ': as)) (f a) (f b)
@@ -217,7 +218,7 @@ hlistIx i f (a :& as) =
 -- insert ss' at head
 
 instance
-    ( ReplaceSubseq '[] ss' rs rs' '[]
+    ( ReplaceSubseqI '[] ss' rs rs' '[]
     , rs' ~ (ss' ++ rs)
     )
     => HSubseqI HList '[] ss' rs rs' '[] where
@@ -236,25 +237,27 @@ instance rs' ~ rs => HQuotientI HList '[] rs rs' '[] where
 instance
     ( HSubseqI HList ss '[] rs rs' dec_is'
     , DecSeq is' dec_is'
-    , IndexesOfSubseq ss (r ': rs) ~ is'
+    --, IndexesOfSubseq ss (r ': rs) ~ is'
     , s ~ r
     )
     => HSubseqI HList (s ': ss) '[] (r ': rs) rs' ('Zero ': is') where
 
-    hsubseqC = after htail hsubseqC
+    hsubseqC = after htail (hsubseqC @HList @_ @_ @_ @_ @dec_is')
     {-# inline hsubseqC #-}
 
 
 instance
     ( HQuotientI HList ss rs rs' dec_is'
     , DecSeq is' dec_is'
-    , IndexesOfSubseq ss (r ': rs) ~ is'
+    --, IndexesOfSubseq ss (r ': rs) ~ is'
     , s ~ r
     )
     => HQuotientI HList (s ': ss) (r ': rs) rs' ('Zero ': is') where
 
     hsubseqSplitC =
-        hunconsed . L.mapping hsubseqSplitC . L.iso (uncurry consl) (L._1 huncons)
+        hunconsed
+        . L.mapping (hsubseqSplitC @HList @_ @_ @_ @dec_is')
+        . L.iso (uncurry consl) (L._1 huncons)
       where
         consl s (!ss, !rs') = (s :& ss, rs')
     {-# inline hsubseqSplitC #-}
@@ -265,38 +268,43 @@ instance
 instance
     ( HSubseqI HList ss ss' rs rs' dec_is'
     , DecSeq is' dec_is'
-    , IndexesOfSubseq ss (r ': rs) ~ is'
+    --, IndexesOfSubseq ss (r ': rs) ~ is'
     , s ~ r
     , s' ~ r'
     )
     => HSubseqI HList (s ': ss) (s' ': ss') (r ': rs) (r' ': rs') ('Zero ': is') where
 
-    hsubseqC = preserving hconsed (after htail hsubseqC)
+    hsubseqC = preserving hconsed (after htail (hsubseqC @HList @_ @_ @_ @_ @dec_is'))
     {-# inline hsubseqC #-}
 
 
 instance
     ( HSubseqI HList ss ss' rs rs' (i ': dec_is')
     , DecSeq is' dec_is'
-    , IndexesOfSubseq ss (r ': rs) ~ IncSeq (IndexesOfSubseq ss rs)
+    --, IndexesOfSubseq ss (r ': rs) ~ IncSeq (IndexesOfSubseq ss rs)
     , r ~ r'
     )
     => HSubseqI HList ss ss' (r ': rs) (r' ': rs') ('Succ i ': is') where
 
-    hsubseqC = htail . hsubseqC
+    hsubseqC = htail . hsubseqC @HList @_ @_ @_ @_ @(i ': dec_is')
     {-# inline hsubseqC #-}
+
+_testSubseqInstance :: ()
+_testSubseqInstance = testSubseqInstance @HList
 
 
 instance
     ( HQuotientI HList ss rs rs' (i ': dec_is')
     , DecSeq is' dec_is'
-    , IndexesOfSubseq ss (r ': rs) ~ IncSeq (IndexesOfSubseq ss rs)
+    --, IndexesOfSubseq ss (r ': rs) ~ IncSeq (IndexesOfSubseq ss rs)
     , r ~ r'
     )
     => HQuotientI HList ss (r ': rs) (r' ': rs') ('Succ i ': is') where
 
     hsubseqSplitC =
-        hunconsed . L.mapping hsubseqSplitC . L.iso (uncurry consr) (L._2 huncons)
+        hunconsed
+        . L.mapping (hsubseqSplitC @HList @_ @_ @_ @(i ': dec_is'))
+        . L.iso (uncurry consr) (L._2 huncons)
       where
         consr r (!ss, !rs') = (ss, r :& rs')
     {-# inline hsubseqSplitC #-}
@@ -308,7 +316,8 @@ instance TupleView HList '[] where
     htupleWithC _ HNil = HTuple ()
     fromHTuple (HTuple ()) = HNil
 
-$(concat <$> forM [1..24] \n -> do
+
+$(concat <$> forM [1..16] \n -> do
     cxt <- htupleInstanceContext n
 
     let recPat   = foldr (\a as -> [p| $a :& $as |]) [p| HNil |] (gen_aPats cxt)
@@ -319,8 +328,11 @@ $(concat <$> forM [1..24] \n -> do
 
     [d|
         instance TupleView HList $(gen_listTy cxt) where
-            htupleWith  h $recPat = $(gen_tupExp cxt \_ fa -> [| h $fa |])
-            htupleWithC h $recPat = $(gen_tupExp cxt \_ fa -> [| h $fa |])
+            htupleWith  h $recPat = $(gen_tupExp cxt \_ _ fa -> [| h $fa |])
+            {-# inline htupleWith #-}
+            htupleWithC h $recPat = $(gen_tupExp cxt \_ _ fa -> [| h $fa |])
+            {-# inline htupleWithC #-}
 
             fromHTuple $(gen_tupPat cxt) = $(recExp \_ fa -> fa)
+            {-# inline fromHTuple #-}
       |])

@@ -1,42 +1,60 @@
 --{-# options_ghc -ddump-simpl -dsuppress-idinfo -dsuppress-unfoldings -dsuppress-coercions #-}
 {-# language ApplicativeDo #-}
-{-# language AllowAmbiguousTypes #-}
 {-# language RoleAnnotations #-}
+{-# language MagicHash #-}
 {-# language GeneralizedNewtypeDeriving #-}
-{-# language OverloadedLabels #-}
 {-# language TemplateHaskell #-}
 {-# language UndecidableInstances #-}
 module Data.Frame.Impl.ColVectors where
 
-import GHC.OverloadedLabels
-import Control.Lens (Iso, coerced)
+import GHC.Stack
+
+import Control.Lens hiding ((:>))
 import Control.Rowwise
 import Data.Vector.Generic qualified as VG
+import Data.Vector.Generic.Lens (vectorTraverse)
 
-import Data.Frame.Kind
 import Data.Frame.Class
-import Data.Frame.TH.Expr (rowwise)
 import Data.Frame.DataTypes.Vector
+import Data.Frame.Kind
 import Data.Frame.TypeIndex
-import Data.Heterogeneous.HSmallArray (HSmallArray)
 import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.Member
+import Data.Heterogeneous.Class.Subseq
+import Data.Heterogeneous.HSmallArray (HSmallArray)
+import Data.Heterogeneous.HTuple
+import Data.Heterogeneous.TypeLevel
 
 
 type Column :: FieldK -> Type
 newtype Column col = Column (Vector (FieldType col))
 
 
-colVector :: Iso (Column (s :> a)) (Column (s :> b)) (Vector a) (Vector b)
-colVector = coerced
+type Columns :: FieldsK -> Type
+type Columns cols = HSmallArray Column cols
 
 
 type Frame :: FrameK
-data Frame cols = Frame !Int !(HSmallArray Column cols)
+data Frame cols = Frame
+    { _nrow :: !Int
+    , _columns :: !(Columns cols)
+    }
+
+makeLenses ''Frame
 
 
 class (VG.Vector Vector a, KnownVectorMode (VectorModeOf a)) => KnownDataType_ a
 instance (VG.Vector Vector a, KnownVectorMode (VectorModeOf a)) => KnownDataType_ a
+
+
+colVector :: Iso (Column (s :> a)) (Column (s :> b)) (Vector a) (Vector b)
+colVector = coerced
+
+
+colValues ::
+    (KnownDataType Frame a, KnownDataType Frame b)
+    => IndexedTraversal Int (Column (s :> a)) (Column (s :> b)) a b
+colValues = colVector.vectorTraverse
 
 
 instance IsFrame Frame HSmallArray where
@@ -44,58 +62,103 @@ instance IsFrame Frame HSmallArray where
 
     -- type Env :: FieldsK -> Type -> Type -> Type
     -- type role Env nominal nominal nominal representational
-    newtype Env Frame cols tok a = FrameEnv (Rowwise (Frame cols) a)
+    newtype Env Frame cols a = FrameEnv (Rowwise (Frame cols) a)
         deriving newtype (Functor, Applicative)
 
-    getCol (_ :: proxy col) =
+
+    col :: forall col cols i proxy.
+        ( FieldSpecProxy col cols i proxy
+        , KnownField Frame col
+        , HGet HSmallArray col cols
+        )
+        => proxy
+        -> Env Frame cols (FieldType col)
+    col _ =
         FrameEnv $ unsafeRowwise \(Frame _ cols) ->
             let Column v = hget @col cols
                 !i       = VG.unsafeIndex v
             in i
 
 
-instance
-    ( a ~ FindFieldType s cols
+checkLengths :: HasCallStack => Int -> Int -> Int
+checkLengths !n !m
+  | n == m    = n
+  | otherwise = error $
+        "Frame.checkLength: data frame length mismatch: " ++ show n ++ " /= " ++ show m
+{-# inline checkLengths #-}
+
+
+-- this ensures that the user does not modify the length of the frame
+-- throws error if not preserved!
+frameOfLength :: forall cols cols'.
+    HasCallStack
+    => Int
+    -> Iso
+        (Columns cols) (Columns cols')
+        (Frame cols)   (Frame cols')
+frameOfLength n =
+    iso (Frame n) deframe
+  where
+    deframe :: Frame cols' -> Columns cols'
+    deframe (Frame m cs) = checkLengths n m `seq` cs
+{-# inline frameOfLength #-}
+
+
+newCol :: forall s a cols proxy.
+    ( NameSpecProxy s proxy
     , KnownDataType Frame a
-    , HGet HSmallArray (FindField s cols) cols
     )
-    => IsLabel s (Env Frame cols tok a) where
-    fromLabel =
-        FrameEnv $ unsafeRowwise \(Frame _ cols) ->
-            let Column v = hget @(FindField s cols) cols
-                !i        = VG.unsafeIndex v
-            in i
+    => proxy
+    -> Frame cols
+    -> Env Frame cols a
+    -> Column (s :> a)
+newCol _ df@(Frame n _) (FrameEnv rww) =
+    Column (VG.generate n (runRowwise rww df))
 
 
-test :: Env Frame '["a":>Int, "b":>Char, "c":>Double] tok Double
-test = do
-    a <- col @"a"
-    c <- col @"c"
-    pure (fromIntegral a + c)
+prependCol :: forall s a cols proxy.
+    ( NameSpecProxy s proxy
+    , KnownDataType Frame a
+    )
+    => proxy
+    -> Env Frame cols a
+    -> Frame cols
+    -> Frame ((s :> a) ': cols)
+prependCol proxy env df@(Frame n cols) =
+    Frame n (newCol proxy df env `hcons` cols)
 
 
-test2 :: Env Frame '["a":>Int, "b":>Char, "c":>Double] tok Double
-test2 = $(rowwise [| fromIntegral #a + #c |])
---       [rowwise| fromIntegral #a + #c*#a |]
+appendCol :: forall s a cols proxy.
+    ( NameSpecProxy s proxy
+    , KnownDataType Frame a
+    )
+    => proxy
+    -> Env Frame cols a
+    -> Frame cols
+    -> Frame (cols ++ '[s :> a])
+appendCol proxy env df@(Frame n cols) =
+    Frame n (cols `hsnoc` newCol proxy df env)
 
 
-newCol :: forall s a cols.
-    KnownDataType Frame a
-    => Frame cols
-    -> (forall tok. Env Frame cols tok a) -> Column (s :> a)
-newCol df@(Frame nrow _) env =
-    case env @() of
-        FrameEnv rww ->
-            Column (VG.generate nrow (runRowwise rww df))
+restricting :: forall cols1' cols2' cols1 cols2 is proxy.
+    ( FieldSpecProxy cols1' cols1 is proxy
+    , HSubseq HSmallArray cols1' cols2' cols1 cols2
+    )
+    => proxy
+    -> Lens (Frame cols1) (Frame cols2) (Frame cols1') (Frame cols2')
+restricting _ f df@(Frame n _) =
+    (columns . hsubseq @cols1' @cols2' . frameOfLength n) f df
 
 
-testAppend ::
-    Frame '["a":>Int, "b":>Char, "c":>Double]
-    -> Frame '["a":>Int, "b":>Char, "c":>Double, "d":>Double]
-testAppend df@(Frame nrow cols) =
-    let d = newCol df test
-    in  Frame nrow (hsnoc cols d)
+transmute :: forall cols' ss' cols t proxy.
+    ( NameSpecProxy ss' proxy
+    , cols' ~ ZipWith (:>) ss' (TupleMembers t)
+    )
+    => proxy
+    -> Env Frame cols t
+    -> Frame cols
+    -> Frame cols'
+transmute = undefined
 
-
-materializeCol :: forall s a cols. Rowwise (Frame cols) a -> Column (s :> a)
-materializeCol = undefined
+-- materializeCol :: forall s a cols. Rowwise (Frame cols) a -> Column (s :> a)
+-- materializeCol = undefined

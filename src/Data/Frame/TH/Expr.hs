@@ -1,16 +1,19 @@
+{-# language MagicHash #-}
 {-# language TemplateHaskellQuotes #-}
 module Data.Frame.TH.Expr where
 
-import Data.HashTable.IO qualified as HT
 import GHC.Generics
+import Data.Foldable (foldl')
+import Data.HashTable.IO qualified as HT
 import Data.Ratio (Ratio)
 import Data.Word (Word8)
+import Language.Haskell.TH.Lib
 import Language.Haskell.TH.Syntax
 
 import Data.Frame.Class (col)
 
 import Control.Lens (Traversal', _Just, has, forMOf)
-import Language.Haskell.TH.Lens (_LabelE)
+import Language.Haskell.TH.Lens (_ImplicitParamVarE)
 
 
 class GHasExps g where
@@ -112,22 +115,22 @@ rowwise qe = do
 
     names :: HT.BasicHashTable String Name <- runIO $ HT.new
 
-    e' <- forMOf (exps (has _LabelE)) e \(LabelE l) ->
-        runIO (HT.lookup names l) >>= \case
+    e' <- forMOf (exps (has _ImplicitParamVarE)) e \(ImplicitParamVarE p) ->
+        runIO (HT.lookup names p) >>= \case
             Just varName ->
                 return (VarE varName)
             Nothing -> do
-                varName <- newName l
-                runIO $ HT.insert names l varName
+                varName <- newName p
+                runIO $ HT.insert names p varName
                 return (VarE varName)
 
     varNames <- runIO $ HT.toList names
 
-    let binds =
-          [ BindS
-            (VarP varName)
-            (AppTypeE (VarE 'col) (LitT (StrTyLit label)))
-          | (label, varName) <- varNames
-          ]
+    let lam = lamE [varP varName | (_, varName) <- varNames] (return e')
 
-    return $ DoE Nothing $ binds ++ [NoBindS (AppE (VarE 'pure) e')]
+        fields =
+            [ [e| col $(labelE label) |]
+            | (label, _) <- varNames
+            ]
+
+    foldl' (\f fld -> [| $f <*> $fld |]) [|pure $lam|] fields

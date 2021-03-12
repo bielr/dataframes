@@ -24,7 +24,6 @@ import Data.Kind (Constraint)
 
 data Peano = Zero | Succ Peano
 
-
 type PeanoToNat :: Peano -> Nat
 type family PeanoToNat p where
     PeanoToNat 'Zero     = 0

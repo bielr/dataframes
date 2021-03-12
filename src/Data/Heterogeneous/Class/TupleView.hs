@@ -17,10 +17,8 @@ class TupleView hf as where
         -> hf f as
         -> HTuple g as
 
-    htupleWithC :: forall c f g tup_g_as.
-        ( FoldConstraints (Map c as)
-        , IsTupleOf (Map g as) tup_g_as
-        )
+    htupleWithC :: forall c f g.
+        FoldConstraints (Map c as)
         => (forall a. c a => f a -> g a)
         -> hf f as
         -> HTuple g as

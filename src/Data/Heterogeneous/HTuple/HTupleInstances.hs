@@ -16,7 +16,7 @@ import Data.Heterogeneous.TypeLevel
 
 
 
-$(concat <$> forM [0..16] \n -> do
+$(concat <$> forM [0..8] \n -> do
     cxt <- htupleInstanceContext n
 
     concat <$> forM [0..n-1] \i ->
@@ -29,7 +29,7 @@ $(concat <$> forM [0..16] \n -> do
           |])
 
 
-$(concat <$> forM [0..16] \n -> do
+$(concat <$> forM [0..8] \n -> do
     cxt <- htupleInstanceContext n
 
     aName <- TH.newName "a"
@@ -71,7 +71,7 @@ $(concat <$> forM [0..16] \n -> do
         TH.instanceD (TH.cxt hsetICxtPreds) hsetIinstHead [hsetCimpl])
 
 
-$(concat <$> forM [0..32] \n -> do
+$(concat <$> forM [0..8] \n -> do
     cxt <- htupleInstanceContext n
 
     let tupCon = return (TH.TupE (replicate n Nothing))

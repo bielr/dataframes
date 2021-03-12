@@ -1,6 +1,11 @@
+{-# language MagicHash #-}
 {-# language UndecidableInstances #-}
 module Data.Frame.TypeIndex where
 
+import GHC.OverloadedLabels (IsLabel(..))
+import GHC.Tuple
+import Data.Heterogeneous.HTuple
+import Data.Heterogeneous.TypeLevel.List
 import Data.Frame.Kind
 
 
@@ -37,6 +42,30 @@ type FieldSpec :: forall ki kr. FieldsK -> ki -> kr -> Constraint
 type FieldSpec rs (i :: ki) (r :: kr) = ProjField ki kr rs i ~ r
 
 
+type SingleFieldProxy :: forall ki. ki -> Type
+data SingleFieldProxy i = SingleFieldProxy
+
+instance s ~ i => IsLabel s (SingleFieldProxy i) where
+    fromLabel = SingleFieldProxy
+
+instance s ~ i => IsLabel s (Solo (SingleFieldProxy i)) where
+    fromLabel = Solo SingleFieldProxy
+
+
+type family InferIndexKind kr where
+    InferIndexKind FieldK   = Symbol
+    InferIndexKind [FieldK] = [Symbol]
+
+type FieldSpecProxy :: forall kr. kr -> FieldsK -> InferIndexKind kr -> Type -> Constraint
+type family FieldSpecProxy r rs is proxy where
+    FieldSpecProxy (r :: FieldK)   rs i  proxy = (FieldSpec rs i r, proxy ~ SingleFieldProxy i)
+    FieldSpecProxy (r :: [FieldK]) rs is proxy = (FieldSpec rs is r, Mapped SingleFieldProxy is (TupleMembers proxy))
+
+
+TODO: allow specifying r manually or by Int index
+TODO: get rid of the `is` parameter (UnMap)
+
+
 -- Specifying one or more field(s) by name(s) or full spec(s)
 -- The list-ness of the spec determines the list-ness of the output
 
@@ -68,3 +97,19 @@ type family ProjName (ki :: Type) (kr :: Type) (i :: ki) :: kr where
 
 type NameSpec :: forall ki kr. ki -> kr -> Constraint
 type NameSpec (i :: ki) (s :: kr) = ProjName ki kr i ~ s
+
+
+type SingleNameProxy :: Symbol -> Type
+data SingleNameProxy s = SingleNameProxy
+
+instance s ~ i => IsLabel s (SingleNameProxy i) where
+    fromLabel = SingleNameProxy
+
+instance s ~ i => IsLabel s (Solo (SingleNameProxy i)) where
+    fromLabel = Solo SingleNameProxy
+
+
+type NameSpecProxy :: forall {ks}. ks -> Type -> Constraint
+type family NameSpecProxy ss proxy where
+    NameSpecProxy (s :: Symbol)    proxy = proxy ~ SingleNameProxy s
+    NameSpecProxy (ss :: [Symbol]) proxy = Mapped SingleNameProxy ss (TupleMembers proxy)

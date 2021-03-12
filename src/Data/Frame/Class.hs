@@ -1,11 +1,9 @@
-{-# language AllowAmbiguousTypes #-}
 {-# language MagicHash #-}
 {-# language UndecidableInstances #-}
 {-# language UndecidableSuperClasses #-}
 {-# language QuantifiedConstraints #-}
 module Data.Frame.Class where
 
-import GHC.Exts (Proxy#, proxy#)
 import GHC.TypeLits (KnownSymbol)
 import Data.Frame.Kind
 import Data.Frame.TypeIndex
@@ -32,26 +30,35 @@ instance
 type IsFrame :: FrameK -> RecK -> Constraint
 
 class
-    (forall cols tok. Applicative (Env df cols tok))
+    (forall cols. Applicative (Env df cols))
     => IsFrame df rec | df -> rec where
 
     type KnownDataType df :: Type -> Constraint
 
-    data Env df :: FieldsK -> Type -> Type -> Type
+    data Env df :: FieldsK -> Type -> Type
 
-    getCol :: forall col cols tok.
-        ( HGet rec col cols
+    col :: forall col cols i proxy.
+        ( FieldSpecProxy col cols i proxy
         , KnownField df col
+        , HGet rec col cols
         )
-        => Proxy# col
-        -> Env df cols tok (FieldType col)
+        => proxy
+        -> Env df cols (FieldType col)
 
 
-col :: forall i col cols df rec tok.
-    ( FieldSpec cols i col
+multicol :: forall cols' cols df rec is proxy.
+    ( FieldSpecProxy cols' cols is proxy
     , IsFrame df rec
-    , HGet rec col cols
-    , KnownField df col
     )
-    => Env df cols tok (FieldType col)
-col = getCol (proxy# @col)
+    => proxy
+    -> Env df cols (df cols')
+multicol = undefined
+
+
+-- record :: forall ss as cols.
+--     ( cols ~ ZipWith (:>) ss as
+--     , Coercible (TupleOf as) (HTuple Field cols)
+--     )
+--     => TupleOf as
+--     -> HTuple Field cols
+-- record = coerce

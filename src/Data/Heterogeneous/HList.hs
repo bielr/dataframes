@@ -317,7 +317,7 @@ instance TupleView HList '[] where
     fromHTuple (HTuple ()) = HNil
 
 
-$(concat <$> forM [1..16] \n -> do
+$(concat <$> forM [1..8] \n -> do
     cxt <- htupleInstanceContext n
 
     let recPat   = foldr (\a as -> [p| $a :& $as |]) [p| HNil |] (gen_aPats cxt)

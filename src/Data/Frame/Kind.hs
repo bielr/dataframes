@@ -26,7 +26,7 @@ import Data.Type.Equality as Exports (type (==))
 data FieldK = Symbol :> Type
 
 type (:>) :: Symbol -> Type -> FieldK
-type s :> t = s ':> t
+type (:>) = '(:>)
 
 type FieldName :: FieldK -> Symbol
 type family FieldName col where

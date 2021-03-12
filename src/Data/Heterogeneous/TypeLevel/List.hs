@@ -10,8 +10,8 @@ import Data.Heterogeneous.TypeLevel.Kind
 import Data.Heterogeneous.TypeLevel.Peano
 
 
-type Map :: forall k j. (k -> j) -> [k] -> [j]
-type family Map f xs where
+type Map :: (i -> j) -> [i] -> [j]
+type family Map f xs = ys where
     Map _       '[] = '[]
     Map f (x ': xs) = f x ': Map f xs
 
@@ -21,6 +21,20 @@ data MapExp f xs :: Exp [j]
 
 type instance Eval (MapExp f '[])       = '[]
 type instance Eval (MapExp f (x ': xs)) = Eval (f x) ': Eval (MapExp f xs)
+
+
+-- workaround because GHC can't understand that Map is injective for fixed i
+type Mapped :: forall {i} {j}. (i -> j) -> [i] -> [j] -> Constraint
+
+class ys ~ Map f xs => Mapped f (xs :: [i]) (ys :: [j]) | i ys -> xs
+instance Mapped f '[] '[]
+instance (y ~ f x, Mapped f xs ys) => Mapped f (x ': xs) (y ': ys)
+
+
+type ZipWith :: forall i j k. (i -> j -> k) -> [i] -> [j] -> [k]
+type family ZipWith f is js where
+    ZipWith _       '[]       '[] = '[]
+    ZipWith f (i ': is) (j ': js) = f i j ': ZipWith f is js
 
 
 type (++) :: forall k. [k] -> [k] -> [k]
@@ -65,6 +79,7 @@ type family ApplyTyCon args f where
     ApplyTyCon (a ': as) f = ApplyTyCon as (f a)
 
 
+-- workaround because GHC can't understand that ApplyTyCon is injective
 type AppliedTyCon :: forall k j. forall (args :: [k]) -> NAryTyConK (Length args) k j -> j -> Constraint
 
 class r ~ ApplyTyCon args f => AppliedTyCon args f r | f r -> args, args r -> f, f args -> r

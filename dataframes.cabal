@@ -90,6 +90,7 @@ library
       Data.Frame.Field
       Data.Frame.Impl.ColVectors
       Data.Frame.Kind
+      Data.Frame.Pipe
       Data.Frame.TH.Expr
       Data.Frame.TypeIndex
       Data.Functor.Boilerplate

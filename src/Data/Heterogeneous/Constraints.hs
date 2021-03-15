@@ -15,15 +15,11 @@ module Data.Heterogeneous.Constraints
   , iconstrained
   ) where
 
-import Data.Kind (Constraint)
-
 import Data.Constraint (Dict(..))
 
 import Data.Heterogeneous.Constraints.Tupled
 import Data.Heterogeneous.Constraints.TupledInstances ()
-import Data.Heterogeneous.TypeLevel.Index
-import Data.Heterogeneous.TypeLevel.List
-import Data.Heterogeneous.TypeLevel.SNat
+import Data.Heterogeneous.TypeLevel
 
 
 type TrueC :: forall k. k -> Constraint

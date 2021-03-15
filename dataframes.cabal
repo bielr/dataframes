@@ -55,7 +55,6 @@ common shared-properties
       TypeOperators
   ghc-options:
       -Wall
-      -Werror
       -Wincomplete-patterns
       -fspecialise-aggressively
       -flate-specialise
@@ -83,6 +82,7 @@ common shared-properties
 
 library
   import: shared-properties
+  ghc-options: -Werror
   exposed-modules:
       Control.Rowwise
       Data.Frame.Class
@@ -116,6 +116,7 @@ library
       Data.Heterogeneous.HTuple
       Data.Heterogeneous.HTuple.TH
       Data.Heterogeneous.TypeLevel
+      Data.Heterogeneous.TypeLevel.Apply
       Data.Heterogeneous.TypeLevel.Index
       Data.Heterogeneous.TypeLevel.Kind
       Data.Heterogeneous.TypeLevel.List

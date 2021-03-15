@@ -24,6 +24,7 @@ import Data.Heterogeneous.Class.Subseq
 import Data.Heterogeneous.HSmallArray (HSmallArray)
 import Data.Heterogeneous.HTuple
 import Data.Heterogeneous.TypeLevel
+import Type.Errors
 
 
 type Column :: FieldK -> Type
@@ -66,16 +67,16 @@ instance IsFrame Frame HSmallArray where
         deriving newtype (Functor, Applicative)
 
 
-    col :: forall col cols i proxy.
-        ( FieldSpecProxy col cols i proxy
+    col :: forall i col cols proxy.
+        ( IsFieldsProxy cols i proxy
         , KnownField Frame col
-        , HGet HSmallArray col cols
+        , HGetI HSmallArray col cols i
         )
         => proxy
         -> Env Frame cols (FieldType col)
     col _ =
         FrameEnv $ unsafeRowwise \(Frame _ cols) ->
-            let Column v = hget @col cols
+            let Column v = hgetC @_ @_ @_ @i cols
                 !i       = VG.unsafeIndex v
             in i
 
@@ -105,7 +106,7 @@ frameOfLength n =
 
 
 newCol :: forall s a cols proxy.
-    ( NameSpecProxy s proxy
+    ( IsNameProxy s proxy
     , KnownDataType Frame a
     )
     => proxy
@@ -117,7 +118,7 @@ newCol _ df@(Frame n _) (FrameEnv rww) =
 
 
 prependCol :: forall s a cols proxy.
-    ( NameSpecProxy s proxy
+    ( IsNameProxy s proxy
     , KnownDataType Frame a
     )
     => proxy
@@ -129,7 +130,7 @@ prependCol proxy env df@(Frame n cols) =
 
 
 appendCol :: forall s a cols proxy.
-    ( NameSpecProxy s proxy
+    ( IsNameProxy s proxy
     , KnownDataType Frame a
     )
     => proxy
@@ -140,19 +141,26 @@ appendCol proxy env df@(Frame n cols) =
     Frame n (cols `hsnoc` newCol proxy df env)
 
 
-restricting :: forall cols1' cols2' cols1 cols2 is proxy.
-    ( FieldSpecProxy cols1' cols1 is proxy
-    , HSubseq HSmallArray cols1' cols2' cols1 cols2
+restricting :: forall is cols1' cols2' cols1 cols2 proxy.
+    ( IsFieldsProxy cols1 is proxy
+    , HSubseqI HSmallArray cols1' cols2' cols1 cols2 is
     )
     => proxy
     -> Lens (Frame cols1) (Frame cols2) (Frame cols1') (Frame cols2')
 restricting _ f df@(Frame n _) =
-    (columns . hsubseq @cols1' @cols2' . frameOfLength n) f df
+    (columns . hsubseqC @_ @cols1' @cols2' @cols1 @cols2 @is . frameOfLength n) f df
 
 
 transmute :: forall cols' ss' cols t proxy.
-    ( NameSpecProxy ss' proxy
-    , cols' ~ ZipWith (:>) ss' (TupleMembers t)
+    ( IsNameProxy ss' proxy
+    , IfStuck (ForcePeano (Length (ZipWith (:>) ss' (TupleMembers t))))
+        (DelayError
+            ('Text "Could not match names "
+                ':<>: 'ShowType ss'
+                ':<>: 'Text " with types in "
+                ':<>: 'ShowType (TupleMembers t)))
+        (Pure
+            (cols' ~ ZipWith (:>) ss' (TupleMembers t)))
     )
     => proxy
     -> Env Frame cols t

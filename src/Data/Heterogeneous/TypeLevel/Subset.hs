@@ -39,7 +39,11 @@ type IsSet as =
 
 
 type IsSubset :: forall k. [k] -> [k] -> Constraint
-type IsSubset ss rs = (IsSet ss, IsSet rs, AreIndexesOf (IndexesOf ss rs) ss rs)
+type IsSubset ss rs =
+    ( IsSet ss
+    , IsSet rs
+    , AreIndexesOf (IndexesOf ss rs) ss rs
+    )
 
 
 type IsSubsetWithError :: forall k. [k] -> [k] -> Constraint

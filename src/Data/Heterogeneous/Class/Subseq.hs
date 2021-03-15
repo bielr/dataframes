@@ -33,7 +33,7 @@ class ReplaceSubseqI ss ss' rs rs' is => HSubseqI hf ss ss' rs rs' is where
 
 type HSubseq :: forall k. HTyConK k -> [k] -> [k] -> [k] -> [k] -> Constraint
 type HSubseq hf ss ss' rs rs' =
-    ( ReplaceSubseqWithError ss ss' rs rs'
+    ( ReplaceSubseq ss ss' rs rs'
     , HSubseqI hf ss ss' rs rs' (IndexesOfSubseq ss rs)
     )
 

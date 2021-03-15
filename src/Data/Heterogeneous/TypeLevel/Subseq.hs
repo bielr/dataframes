@@ -5,8 +5,10 @@ module Data.Heterogeneous.TypeLevel.Subseq
   , IndexesOf
   , IndexesOfSubseq
   , IsSubseqI
+  , IsSubseq
   , IsSubseqWithError
   , ReplaceSubseqI
+  , ReplaceSubseq
   , ReplaceSubseqWithError
   ) where
 
@@ -76,6 +78,10 @@ instance
     => IsSubseqI ss (r ': rs) ('Succ i ': is)
 
 
+type IsSubseq :: forall k. [k] -> [k] -> Constraint
+type IsSubseq ss rs = IsSubseqI ss rs (IndexesOfSubseq ss rs)
+
+
 type IsSubseqWithError :: forall k. [k] -> [k] -> Constraint
 type IsSubseqWithError ss rs =
     ( IfStuck (ForcePeanos (IndexesOf ss rs))
@@ -83,7 +89,7 @@ type IsSubseqWithError ss rs =
         (Pure
             (WhenStuck (ForcePeanos (IndexesOfSubseq ss rs))
                 (DelayError (IndexesOfSubseqMonotoneError ss rs))))
-    , IsSubseqI ss rs (IndexesOfSubseq ss rs)
+    , IsSubseq ss rs
     )
 
 
@@ -140,10 +146,15 @@ instance
     => ReplaceSubseqI ss ss' (r ': rs) (r' ': rs') ('Succ i ': is) where
 
 
+type ReplaceSubseq :: forall k. [k] -> [k] -> [k] -> [k] -> Constraint
+type ReplaceSubseq ss ss' rs rs' =
+    ReplaceSubseqI ss ss' rs rs' (IndexesOfSubseq ss rs)
+
+
 type ReplaceSubseqWithError :: forall k. [k] -> [k] -> [k] -> [k] -> Constraint
 type ReplaceSubseqWithError ss ss' rs rs' =
     ( IsSubseqWithError ss rs
-    , ReplaceSubseqI ss ss' rs rs' (IndexesOfSubseq ss rs)
+    , ReplaceSubseq ss ss' rs rs'
     )
 
 

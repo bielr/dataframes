@@ -1,12 +1,17 @@
-{-# options_ghc -ddump-splices -Wno-error=unused-do-bind #-}
+{-# options_ghc -Wno-error=unused-do-bind #-}
 {-# language QualifiedDo #-}
 {-# language ImplicitParams #-}
 {-# language OverloadedLabels #-}
 {-# language TemplateHaskell #-}
+{-# language TupleSections #-}
 module Main where
 
 import Control.Lens
+import GHC.Tuple
 
+import Data.Heterogeneous.TypeLevel
+import Data.Heterogeneous.HTuple
+import Data.Frame.TypeIndex
 import Data.Frame.Class
 import Data.Frame.Impl.ColVectors
 import Data.Frame.Kind
@@ -35,8 +40,8 @@ testAppend = Pipe.do
 
     appendCol #e $(rowwise [| show ?d |])
 
-    restricting (#a,#c) %~ Pipes.do
-        transmute (#c, #a) $(rowwise [| (?c+1, ?a-1) |])
+    restricting (#a,#c) %~ Pipe.do
+        transmute (#x,#y) $(rowwise [| (?c+1, ?a-1) |])
 
 
 main :: IO ()

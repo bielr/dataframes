@@ -10,6 +10,7 @@ import Type.Errors
 
 import Unsafe.Coerce
 
+import Data.Heterogeneous.TypeLevel.Apply
 import Data.Heterogeneous.TypeLevel.Kind
 import Data.Heterogeneous.TypeLevel.List
 import Data.Heterogeneous.TypeLevel.Peano

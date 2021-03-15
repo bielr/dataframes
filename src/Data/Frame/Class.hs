@@ -8,6 +8,8 @@ import GHC.TypeLits (KnownSymbol)
 import Data.Frame.Kind
 import Data.Frame.TypeIndex
 import Data.Heterogeneous.Class.Member
+import Data.Heterogeneous.TypeLevel
+import Type.Errors
 
 
 type KnownField :: FrameK -> FieldK -> Constraint
@@ -37,17 +39,50 @@ class
 
     data Env df :: FieldsK -> Type -> Type
 
-    col :: forall col cols i proxy.
-        ( FieldSpecProxy col cols i proxy
-        , KnownField df col
-        , HGet rec col cols
+    col :: forall i col cols proxy.
+        IsFieldsProxy cols i proxy
+        =>
+        ( KnownField df col
+        , HGetI rec col cols i
         )
         => proxy
         -> Env df cols (FieldType col)
 
 
-multicol :: forall cols' cols df rec is proxy.
-    ( FieldSpecProxy cols' cols is proxy
+type PrettyPrintField :: FieldK -> ErrorMessage
+type family PrettyPrintField col where
+    PrettyPrintField (s :> a) = 'Text ", " ':<>: 'ShowType (s :> a)
+
+
+type PrettyPrintFields :: FieldsK -> ErrorMessage
+type family PrettyPrintFields cols where
+    PrettyPrintFields '[]           = 'Text ""
+    PrettyPrintFields (col ': cols) =
+        PrettyPrintField col
+        ':$$: 'Text ""
+            ':<>: PrettyPrintFields cols
+
+
+type PrettyPrintFrameType :: FrameK -> FieldsK -> ErrorMessage
+type PrettyPrintFrameType df cols =
+    'Text "At this point, the type of the data frame is "
+    ':$$: 'ShowType df
+        ':<>: 'Text " '["
+    ':$$: 'Text "    "
+        ':<>: PrettyPrintFields cols
+        ':<>: 'Text "]"
+
+
+printFrameType :: forall (df :: FrameK) cols.
+    DelayError (PrettyPrintFrameType df cols)
+    => df cols
+    -> df cols
+printFrameType df = df
+
+
+multicol :: forall (is :: [Peano]) cols' cols df rec proxy.
+    ( IsFieldsProxy cols is proxy
+    , cols' ~ IndexAll cols is
     , IsFrame df rec
     )
     => proxy

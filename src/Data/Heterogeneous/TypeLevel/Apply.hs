@@ -1,8 +1,29 @@
 {-# language UndecidableInstances #-}
-module Data.Heterogeneous.TypeLevel.Apply where
+module Data.Heterogeneous.TypeLevel.Apply
+    ( Eval
+    , Exp
+    , Pure
+    , FMap
+
+    , UnApply
+    , UnApplyExp
+    , Map
+    , UnMap
+    , Mapped
+
+    , ZipWith
+    , UnZipWith1
+    , UnZipWith2
+    , ZippedWith
+
+    , ApplyTyCon
+    , AppliedTyCon
+    ) where
 
 import GHC.TypeLits
 import Fcf.Core
+import Fcf.Combinators (Pure)
+import Fcf.Class.Functor (FMap)
 
 import Data.Heterogeneous.TypeLevel.Kind
 import Data.Heterogeneous.TypeLevel.List
@@ -31,15 +52,8 @@ type family Map f xs where
     Map f (x ': xs) = f x ': Map f xs
 
 
-type MapExp :: forall i j. (i -> Exp j) -> [i] -> Exp [j]
-data MapExp f xs :: Exp [j]
-
-type instance Eval (MapExp f '[])       = '[]
-type instance Eval (MapExp f (x ': xs)) = Eval (f x) ': Eval (MapExp f xs)
-
-
 type UnMap :: (i -> j) -> [j] -> [i]
-type UnMap f ys = Eval (MapExp (UnApplyExp f) ys)
+type UnMap f ys = Eval (FMap (UnApplyExp f) ys)
 
 
 -- workaround because GHC can't understand that Map is injective for fixed i

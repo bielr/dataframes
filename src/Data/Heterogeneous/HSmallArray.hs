@@ -8,6 +8,7 @@ module Data.Heterogeneous.HSmallArray
   , hSmallArrayToList
   ) where
 
+import GHC.Exts (Any)
 import Control.Applicative (liftA2)
 import Control.Lens qualified as L
 import Control.Monad.ST (ST)
@@ -15,8 +16,8 @@ import Data.Foldable (toList)
 import Data.Hashable (Hashable(..))
 import Data.Primitive.SmallArray qualified as SA
 import Data.Traversable (forM)
-import GHC.Exts (Any)
 import Language.Haskell.TH qualified as TH
+import Text.Show (showListWith)
 
 import Unsafe.Coerce (unsafeCoerce)
 
@@ -220,6 +221,12 @@ instance AllF Eq f as => Eq (HSmallArray f as) where
 instance (AllF Eq f as, AllF Ord f as) => Ord (HSmallArray f as) where
     compare =
         hifoldr2 (\i a b eq -> constrained @(ComposeC Ord f) @as (compare a b) i <> eq) EQ
+
+
+instance AllF Show f as => Show (HSmallArray f as) where
+    showsPrec _ =
+        showListWith id
+        . hitoListWith \i a -> constrained @(ComposeC Show f) @as (shows a) i
 
 
 instance AllF Hashable f as => Hashable (HSmallArray f as) where

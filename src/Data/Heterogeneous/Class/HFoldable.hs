@@ -82,6 +82,24 @@ class HFoldable hf where
         f' i fa ga k z = k $! f z i fa ga
 
 
+htoListWith ::
+    HFoldable hf
+    => (forall a. f a -> b)
+    -> hf f as
+    -> [b]
+htoListWith f = hfoldr (\fa r -> f fa : r) []
+{-# inline htoListWith #-}
+
+
+hitoListWith ::
+    HFoldable hf
+    => (forall i. i < Length as => SNat i -> f (as !! i) -> b)
+    -> hf f as
+    -> [b]
+hitoListWith f = hifoldr (\i fa r -> f i fa : r) []
+{-# inline hitoListWith #-}
+
+
 htraverse_ ::
     (HFoldable hf, Applicative g)
     => (forall a. f a -> g ())

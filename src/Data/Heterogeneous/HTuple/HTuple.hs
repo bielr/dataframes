@@ -11,11 +11,12 @@ module Data.Heterogeneous.HTuple.HTuple
   ) where
 
 import GHC.Tuple (Solo)
+import Control.Monad (replicateM)
 import Data.Foldable (foldl')
 import Data.Type.Equality
-import Control.Monad (replicateM)
-import Data.Heterogeneous.TypeLevel
 import Language.Haskell.TH qualified as TH
+
+import Data.Heterogeneous.TypeLevel
 
 
 $(do
@@ -157,3 +158,6 @@ instance
 type HTuple :: forall k. HTyConK k
 newtype HTuple f as = HTuple (TupleOf (Map f as))
 
+deriving stock instance Eq (TupleOf (Map f as)) => Eq (HTuple f as)
+deriving stock instance (Eq (TupleOf (Map f as)), Ord (TupleOf (Map f as))) => Ord (HTuple f as)
+deriving stock instance Show (TupleOf (Map f as)) => Show (HTuple f as)

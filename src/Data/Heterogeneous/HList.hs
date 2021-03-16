@@ -1,3 +1,4 @@
+{-# language DeriveGeneric #-}
 {-# language UndecidableInstances #-}
 {-# language TemplateHaskell #-}
 module Data.Heterogeneous.HList where
@@ -7,10 +8,12 @@ import GHC.TypeLits
 import Control.Applicative (liftA2)
 import Control.Lens.Type
 import Control.Lens qualified as L
+import Data.Hashable
+import Data.Hashable.Lifted (Hashable1, hashWithSalt1)
 import Data.Profunctor.Unsafe
 import Data.Traversable (forM)
 
-import Data.Heterogeneous.Functors
+import Data.Heterogeneous.Constraints
 import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.HCreate
 import Data.Heterogeneous.Class.HFoldable
@@ -19,6 +22,7 @@ import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.HTraversable
 import Data.Heterogeneous.Class.Subseq
 import Data.Heterogeneous.Class.TupleView
+import Data.Heterogeneous.Functors
 import Data.Heterogeneous.HTuple (HTuple(..))
 import Data.Heterogeneous.HTuple.TH
 import Data.Heterogeneous.TypeLevel
@@ -71,6 +75,31 @@ preserving :: (Functor f, Profunctor p, Profunctor q)
 preserving hylo l =
     L.withIso hylo \alg coalg ->
         rmap (fmap alg .# getCompose) . l . rmap (Compose #. fmap coalg)
+
+
+deriving stock instance FoldConstraints (Map (ComposeC Eq f) as)
+    => Eq (HList f as)
+
+
+deriving stock instance
+    ( FoldConstraints (Map (ComposeC Eq f) as)
+    , FoldConstraints (Map (ComposeC Ord f) as)
+    )
+    => Ord (HList f as)
+
+
+deriving stock instance FoldConstraints (Map (ComposeC Show f) as)
+    => Show (HList f as)
+
+
+instance (Hashable1 f, FoldConstraints (Map Hashable as))
+    => Hashable (HList f as) where
+    hashWithSalt = go
+      where
+        go :: FoldConstraints (Map Hashable bs) => Int -> HList f bs -> Int
+        go !salt'        HNil = salt'
+        go !salt' (fa :& fas) = go (hashWithSalt1 salt' fa) fas
+
 
 
 instance HSingleton HList where

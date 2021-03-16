@@ -68,12 +68,13 @@ common shared-properties
     , first-class-families
     , ghc-prim
     , hashable
+    , hashable
+    , hashtables
     , lens
     , primitive
     , profunctors
     , tagged
     , template-haskell
-    , hashtables
     , text
     , type-errors
     , vector
@@ -94,7 +95,6 @@ library
       Data.Frame.TH.Expr
       Data.Frame.TypeIndex
       Data.Functor.Boilerplate
-      Data.Heterogeneous
       Data.Heterogeneous.Class.HConv
       Data.Heterogeneous.Class.HCreate
       Data.Heterogeneous.Class.HDistributive
@@ -142,6 +142,7 @@ test-suite dataframes-test
   import: shared-properties
   type: exitcode-stdio-1.0
   main-is: Spec.hs
-  other-modules: Paths_dataframes
+  other-modules:
+      Paths_dataframes
   hs-source-dirs: test
-  build-depends: dataframes
+  build-depends: dataframes, tasty, tasty-hunit

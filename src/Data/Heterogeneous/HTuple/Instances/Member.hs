@@ -1,35 +1,16 @@
 {-# options_ghc -Wno-orphans -Wno-unused-matches #-}
-{-# language TupleSections #-}
 {-# language TemplateHaskell #-}
 {-# language UndecidableInstances #-}
-module Data.Heterogeneous.HTuple.HTupleInstances () where
+module Data.Heterogeneous.HTuple.Instances.Member where
 
-import Data.Foldable (foldl')
-import Data.Traversable (forM)
 import Language.Haskell.TH qualified as TH
 
-import Data.Heterogeneous.Class.HCreate
 import Data.Heterogeneous.Class.Member
-import Data.Heterogeneous.HTuple.HTuple
 import Data.Heterogeneous.HTuple.TH
-import Data.Heterogeneous.TypeLevel
+import Data.Heterogeneous.HTuple.Types
 
 
-
-$(concat <$> forM [0..8] \n -> do
-    cxt <- htupleInstanceContext n
-
-    concat <$> forM [0..n-1] \i ->
-        [d|
-          instance
-              a ~ $(gen_aTys cxt !! i)
-              => HGetI HTuple a $(gen_listTy cxt) $(peanoTys !! i) where
-
-              hgetC $(gen_tupPat cxt) = $(gen_aExps cxt !! i)
-          |])
-
-
-$(concat <$> forM [0..8] \n -> do
+$(forTH [0..maxInstances] \n -> do
     cxt <- htupleInstanceContext n
 
     aName <- TH.newName "a"
@@ -42,7 +23,7 @@ $(concat <$> forM [0..8] \n -> do
 
     cxt2 <- htupleInstanceContext n
 
-    forM [0..n-1] \i -> do
+    forTH [0..n-1] \i -> do
         let hsetICxtPreds :: [TH.PredQ]
             hsetICxtPreds =
               [t| $aTy ~ $(gen_aTys cxt !! i) |]
@@ -57,9 +38,9 @@ $(concat <$> forM [0..8] \n -> do
             hsetIinstHead =
               [t| HSetI HTuple $aTy $bTy $(gen_listTy cxt) $(gen_listTy cxt2) $(peanoTys !! i) |]
 
-            hsetCimpl :: TH.DecQ
-            hsetCimpl =
-                TH.funD 'hsetC
+            hsetIimpl :: TH.DecQ
+            hsetIimpl =
+                TH.funD 'hsetI
                     [ TH.clause [TH.bangP bPat, gen_tupPat cxt]
                         (TH.normalB $
                             gen_tupExp cxt \j _ fa ->
@@ -67,21 +48,5 @@ $(concat <$> forM [0..8] \n -> do
                         []
                     ]
 
-
-        TH.instanceD (TH.cxt hsetICxtPreds) hsetIinstHead [hsetCimpl])
-
-
-$(concat <$> forM [0..8] \n -> do
-    cxt <- htupleInstanceContext n
-
-    let tupCon = return (TH.TupE (replicate n Nothing))
-
-    [d|
-        instance HCreate HTuple $(gen_listTy cxt) where
-            hcreateA f = fmap HTuple $(
-                foldl' (\ff i -> [e| $ff <*> f (getSNat @($i)) |])
-                    [e| pure $tupCon |]
-                    (take n peanoTys)
-                )
-      |])
-
+        fmap (:[]) $
+            TH.instanceD (TH.cxt hsetICxtPreds) hsetIinstHead [hsetIimpl])

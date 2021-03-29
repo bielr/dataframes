@@ -7,20 +7,32 @@
 {-# language UndecidableInstances #-}
 module Data.Frame.Impl.ColVectors where
 
+import GHC.Exts (proxy#)
 import GHC.Stack
 
 import Control.Lens hiding ((:>))
+import Control.Monad
+import Control.Monad.ST qualified as ST
 import Control.Rowwise
+import Data.Type.Coercion
 import Data.Vector.Generic qualified as VG
 import Data.Vector.Generic.Lens (vectorTraverse)
+import Data.Vector.Generic.Mutable qualified as VGM
 
 import Data.Frame.Class
 import Data.Frame.DataTypes.Vector
+import Data.Frame.Field
 import Data.Frame.Kind
 import Data.Frame.TypeIndex
+import Data.Heterogeneous.Class.HCoerce
+import Data.Heterogeneous.Class.HCreate
 import Data.Heterogeneous.Class.HMonoid
+import Data.Heterogeneous.Class.HFoldable
+import Data.Heterogeneous.Class.HTraversable
 import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.Subseq
+import Data.Heterogeneous.Class.TupleView
+import Data.Heterogeneous.Constraints
 import Data.Heterogeneous.HSmallArray (HSmallArray)
 import Data.Heterogeneous.HTuple
 import Data.Heterogeneous.TypeLevel
@@ -31,8 +43,16 @@ type Column :: FieldK -> Type
 newtype Column col = Column (Vector (FieldType col))
 
 
+type MutableColumn :: Type -> FieldK -> Type
+newtype MutableColumn s col = MutableColumn (MVector s (FieldType col))
+
+
 type Columns :: FieldsK -> Type
 type Columns cols = HSmallArray Column cols
+
+
+type MutableColumns :: Type -> FieldsK -> Type
+type MutableColumns s cols = HSmallArray (MutableColumn s) cols
 
 
 type Frame :: FrameK
@@ -76,7 +96,7 @@ instance IsFrame Frame HSmallArray where
         -> Env Frame cols (FieldType col)
     col _ =
         FrameEnv $ unsafeRowwise \(Frame _ cols) ->
-            let Column v = hgetC @_ @_ @_ @i cols
+            let Column v = hgetI @_ @_ @_ @i cols
                 !i       = VG.unsafeIndex v
             in i
 
@@ -117,6 +137,7 @@ newCol _ df@(Frame n _) (FrameEnv rww) =
     Column (VG.generate n (runRowwise rww df))
 
 
+
 prependCol :: forall s a cols proxy.
     ( IsNameProxy s proxy
     , KnownDataType Frame a
@@ -148,25 +169,91 @@ restricting :: forall is cols1' cols2' cols1 cols2 proxy.
     => proxy
     -> Lens (Frame cols1) (Frame cols2) (Frame cols1') (Frame cols2')
 restricting _ f df@(Frame n _) =
-    (columns . hsubseqC @_ @cols1' @cols2' @cols1 @cols2 @is . frameOfLength n) f df
+    (columns . hsubseqI @_ @cols1' @cols2' @cols1 @cols2 @is . frameOfLength n) f df
 
 
-transmute :: forall cols' ss' cols t proxy.
+
+type FieldWriter :: Type -> FieldK -> Type
+newtype FieldWriter s col = FieldWriter
+    { runSTWriter :: Int -> FieldType col -> ST.ST s ()
+    }
+
+
+transmute :: forall cols' ss' as cols t proxy.
     ( IsNameProxy ss' proxy
-    , IfStuck (ForcePeano (Length (ZipWith (:>) ss' (TupleMembers t))))
+    , KnownLength cols'
+
+    , HCoerce HTuple cols'
+    , HTraversable HTuple cols'
+    , TupleView HSmallArray cols'
+
+    , IsTupleOf as t
+    , ZippedWith (:>) ss' as cols'
+    , as ~ Eval (FMap FieldTypeExp cols')
+
+    , All (KnownField Frame) cols'
+
+    , WhenStuck (ForcePeano (Length cols'))
         (DelayError
             ('Text "Could not match names "
                 ':<>: 'ShowType ss'
                 ':<>: 'Text " with types in "
                 ':<>: 'ShowType (TupleMembers t)))
-        (Pure
-            (cols' ~ ZipWith (:>) ss' (TupleMembers t)))
     )
     => proxy
     -> Env Frame cols t
     -> Frame cols
     -> Frame cols'
-transmute = undefined
+transmute _ (FrameEnv rww) df@(Frame n _) = ST.runST do
+    let tupleGen :: Int -> t
+        !tupleGen = runRowwise rww df
 
--- materializeCol :: forall s a cols. Rowwise (Frame cols) a -> Column (s :> a)
--- materializeCol = undefined
+        liftCo :: Coercion a b -> Coercion (x -> a) (x -> b)
+        liftCo Coercion = Coercion
+
+        htupleGen :: Int -> HTuple Identity (TupleMembers t)
+        !htupleGen = coerceWith (liftCo htupleCo) tupleGen
+
+        fieldCo :: NatCoercion Field Identity FieldTypeExp
+        !fieldCo = Coercion
+
+        fieldsGen :: Int -> HTuple Field cols'
+        !fieldsGen =
+            coerceWith
+                (sym (liftCo (hliftCoercionF (proxy# @FieldTypeExp) fieldCo)))
+                htupleGen
+
+    mcols' <- initMVs
+
+    let writers = toWriters mcols'
+
+    forM_ [0..n-1] \i ->
+        htraverse2_ (\w (Field a) -> runSTWriter w i a)
+            writers
+            (fieldsGen i)
+
+    cols' <- freezeCols mcols'
+
+    return (Frame n cols')
+  where
+    initMVs :: ST.ST s (HSmallArray (MutableColumn s) cols')
+    initMVs =
+        hcreateA $
+            constrained @(KnownField Frame) @cols' $
+                MutableColumn <$> VGM.unsafeNew n
+
+    freezeCols ::
+        HSmallArray (MutableColumn s) cols'
+        -> ST.ST s (HSmallArray Column cols')
+    freezeCols =
+        hitraverse $
+            constrained @(KnownField Frame) @cols' \(MutableColumn mv) ->
+                Column <$> VG.unsafeFreeze mv
+
+    toWriters ::
+        HSmallArray (MutableColumn s) cols'
+        -> HTuple (FieldWriter s) cols'
+    toWriters =
+        htupleWithC @_ @_ @(KnownField Frame) \(MutableColumn mv) ->
+            FieldWriter (VGM.unsafeWrite mv)
+

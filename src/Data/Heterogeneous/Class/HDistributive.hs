@@ -12,7 +12,7 @@ import Data.Heterogeneous.TypeLevel
 
 type HDistributive :: forall k. HTyConK k -> [k] -> Constraint
 
-class HFunctor hf => HDistributive hf as where
+class HFunctor hf as => HDistributive hf as where
     hcotraverse ::
         Functor g
         => (forall a. g (f a) -> h a)
@@ -26,21 +26,21 @@ class HFunctor hf => HDistributive hf as where
         -> hf h as
 
     default hcotraverse ::
-        (Functor g, HCreate hf as, HIxed hf)
+        (Functor g, HCreate hf as, HIxed hf as)
         => (forall a. g (f a) -> h a)
         -> g (hf f as)
         -> hf h as
     hcotraverse alg ghf =
-        hcreate \i -> alg (fmap (view (hix i)) ghf)
+        hcreate \i -> alg (fmap (view (hix' i)) ghf)
     {-# inline hcotraverse #-}
 
     default hicotraverse ::
-        (Functor g, HCreate hf as, HIxed hf)
+        (Functor g, HCreate hf as, HIxed hf as)
         => (forall i. i < Length as => SNat i -> g (f (as !! i)) -> h (as !! i))
         -> g (hf f as)
         -> hf h as
     hicotraverse alg ghf =
-        hcreate \i -> alg i (fmap (view (hix i)) ghf)
+        hcreate \i -> alg i (fmap (view (hix' i)) ghf)
     {-# inline hicotraverse #-}
 
 

@@ -28,7 +28,7 @@ import Data.Heterogeneous.TypeLevel.Subseq
 type HSubseqI :: forall {k}. HTyConK k -> [k] -> [k] -> [k] -> [k] -> [Peano] -> Constraint
 
 class ReplaceSubseqI ss ss' rs rs' is => HSubseqI hf ss ss' rs rs' is where
-    hsubseqC :: Lens (hf f rs) (hf f rs') (hf f ss) (hf f ss')
+    hsubseqI :: Lens (hf f rs) (hf f rs') (hf f ss) (hf f ss')
 
 
 type HSubseq :: forall k. HTyConK k -> [k] -> [k] -> [k] -> [k] -> Constraint
@@ -45,7 +45,7 @@ type HSubseq' hf ss rs = HSubseq hf ss ss rs rs
 hsubseq :: forall ss ss' rs rs' hf f.
     HSubseq hf ss ss' rs rs'
     => Lens (hf f rs) (hf f rs') (hf f ss) (hf f ss')
-hsubseq = hsubseqC  @hf @ss @ss' @rs @rs' @(IndexesOfSubseq ss rs)
+hsubseq = hsubseqI  @hf @ss @ss' @rs @rs' @(IndexesOfSubseq ss rs)
 {-# inline hsubseq #-}
 
 
@@ -80,11 +80,11 @@ type HQuotientI :: forall {k}. HTyConK k -> [k] -> [k] -> [k] -> [Peano] -> Cons
 
 class HSubseqI hf ss '[] rs rs' is => HQuotientI hf ss rs rs' is where
     -- Isomorphism when ss' ~ '[]: splitting rs into ss and rs'
-    --  view hsubseqC :: rs -> ss
-    --  set hsubseqC HNil :: rs -> rs'
-    --  view hsubseqSplitC = view hsubseqC &&& set hsubseqC RNil
+    --  view hsubseqI :: rs -> ss
+    --  set hsubseqI HNil :: rs -> rs'
+    --  view hsubseqSplitI = view hsubseqI &&& set hsubseqI RNil
     --  rs is a permutation of ss ++ rs'
-    hsubseqSplitC :: Iso' (hf f rs) (hf f ss, hf f rs')
+    hsubseqSplitI :: Iso' (hf f rs) (hf f ss, hf f rs')
 
 
 type HQuotient :: forall {k}. HTyConK k -> [k] -> [k] -> [k] -> Constraint
@@ -94,6 +94,6 @@ type HQuotient hf sub rs q = HQuotientI hf sub rs q (IndexesOfSubseq sub rs)
 hsubseqSplit :: forall ss rs rs' hf f.
     HQuotient hf ss rs rs'
     => Iso' (hf f rs) (hf f ss, hf f rs')
-hsubseqSplit = hsubseqSplitC @hf @ss @rs @rs' @(IndexesOfSubseq ss rs)
+hsubseqSplit = hsubseqSplitI @hf @ss @rs @rs' @(IndexesOfSubseq ss rs)
 {-# inline hsubseqSplit #-}
 

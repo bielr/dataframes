@@ -11,7 +11,7 @@ import Data.Heterogeneous.TypeLevel.Subseq
 type HGetI :: forall {k}. HTyConK k -> k -> [k] -> Peano -> Constraint
 
 class (rs !! i) ~ r => HGetI hf r rs i | rs i -> r where
-    hgetC :: hf f rs -> f r
+    hgetI :: hf f rs -> f r
 
 
 type HSetI :: forall {k}. HTyConK k -> k -> k -> [k] -> [k] -> Peano -> Constraint
@@ -23,12 +23,12 @@ class
     )
     => HSetI hf r r' rs rs' i | rs r' i -> rs', rs' r i -> rs where
 
-    hsetC :: f r' -> hf f rs -> hf f rs'
+    hsetI :: f r' -> hf f rs -> hf f rs'
 
-    hmemberC :: Lens (hf f rs) (hf f rs') (f r) (f r')
-    hmemberC =
-        lens (hgetC @hf @r @rs @i) (flip (hsetC @hf @r @r' @rs @rs' @i))
-    {-# inline hmemberC #-}
+    hmemberI :: Lens (hf f rs) (hf f rs') (f r) (f r')
+    hmemberI =
+        lens (hgetI @hf @r @rs @i) (flip (hsetI @hf @r @r' @rs @rs' @i))
+    {-# inline hmemberI #-}
 
 
 type HGet :: forall k. HTyConK k -> k -> [k] -> Constraint
@@ -40,21 +40,27 @@ type HSet hf r r' rs rs' = HSetI hf r r' rs rs' (IndexOf r rs)
 
 
 hget :: forall r rs f hf.  HGet hf r rs => hf f rs -> f r
-hget = hgetC @_ @_ @_ @(IndexOf r rs)
+hget = hgetI @_ @_ @_ @(IndexOf r rs)
 
 
 hset :: forall r r' rs rs' f hf. HSet hf r r' rs rs' => f r' -> hf f rs -> hf f rs'
-hset = hsetC @_ @_ @_ @_ @_ @(IndexOf r rs)
+hset = hsetI @_ @_ @_ @_ @_ @(IndexOf r rs)
 
 
 hmember :: forall r r' rs rs' f g hf.
     (Functor g, HSet hf r r' rs rs')
     => (f r -> g (f r'))
     -> hf f rs -> g (hf f rs')
-hmember = hmemberC @_ @_ @_ @_ @_ @(IndexOf r rs)
+hmember = hmemberI @_ @_ @_ @_ @_ @(IndexOf r rs)
 
 
 -- (efficient) indexed access to the elements of an heterogeneous sequence
 
-class HIxed hf where
-    hix :: i < Length as => SNat i -> Lens' (hf f as) (f (as !! i))
+type HIxed :: forall {k}. HTyConK k -> [k] -> Constraint
+
+class HIxed hf as where
+    hix' :: i < Length as => SNat i -> Lens' (hf f as) (f (as !! i))
+
+    hix :: ReplaceSubseqI '[a] '[b] as bs '[i]
+        => SNat i
+        -> Lens (hf f as) (hf f bs) (f a) (f b)

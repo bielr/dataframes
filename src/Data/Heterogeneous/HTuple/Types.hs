@@ -1,6 +1,8 @@
+{-# language AllowAmbiguousTypes #-}
+{-# language QuantifiedConstraints #-}
 {-# language TemplateHaskell #-}
 {-# language UndecidableInstances #-}
-module Data.Heterogeneous.HTuple.HTuple
+module Data.Heterogeneous.HTuple.Types
   ( TupleTyCon
   , TupleLength
   , TupleTyConOf
@@ -157,6 +159,7 @@ instance
 
 type HTuple :: forall k. HTyConK k
 newtype HTuple f as = HTuple (TupleOf (Map f as))
+
 
 deriving stock instance Eq (TupleOf (Map f as)) => Eq (HTuple f as)
 deriving stock instance (Eq (TupleOf (Map f as)), Ord (TupleOf (Map f as))) => Ord (HTuple f as)

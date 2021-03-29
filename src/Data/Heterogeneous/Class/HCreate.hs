@@ -15,7 +15,7 @@ import Data.Heterogeneous.TypeLevel
 
 -- Generic record creation
 
-type HCreate :: forall k. HTyConK k -> [k] -> Constraint
+type HCreate :: forall {k}. HTyConK k -> [k] -> Constraint
 
 class HCreate hf as where
     hcreateA ::

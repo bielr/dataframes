@@ -5,10 +5,11 @@ module Data.Heterogeneous.HTuple.TH where
 import GHC.Tuple
 import Language.Haskell.TH
 import Data.Foldable (foldl')
-import Control.Monad (replicateM)
+import Control.Monad (forM, replicateM)
 
-import Data.Heterogeneous.HTuple.HTuple
+import Data.Heterogeneous.HTuple.Types
 import Data.Heterogeneous.TypeLevel
+
 
 
 data GenHTupleCxt = GenHTupleCxt
@@ -26,8 +27,21 @@ data GenHTupleCxt = GenHTupleCxt
     }
 
 
+maxInstances :: Int
+maxInstances = 8
+
+
+forTH :: [Int] -> (Int -> DecsQ) -> DecsQ
+forTH rng = fmap concat . forM rng
+
+
 peanoTys :: [TypeQ]
 peanoTys = iterate (\i -> [t| 'Succ $i |]) [t| 'Zero |]
+
+
+snatE :: Int -> ExpQ
+snatE i = [e| SNat i :: SNat $(peanoTys !! i) |]
+
 
 
 htupleInstanceContext :: Int -> Q GenHTupleCxt

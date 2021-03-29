@@ -1,7 +1,7 @@
 {-# language AllowAmbiguousTypes #-}
 {-# language UndecidableInstances #-}
 module Data.Heterogeneous.Class.Subset
-  ( HSubsetI
+  ( HSubsetI(..)
   , HSubset
   , HReorder
   , hgetSubset
@@ -20,11 +20,11 @@ import Data.Heterogeneous.TypeLevel.Subset (IsSubsetWithError)
 type HSubsetI :: forall {k}. HTyConK k -> [k] -> [k] -> [Peano] -> Constraint
 
 class IndexAll rs is ~ ss => HSubsetI hf ss rs is where
-    hgetSubsetC :: hf f rs -> hf f ss
-    hsetSubsetC :: hf f ss' -> hf f rs -> hf f rs
+    hgetSubsetI :: hf f rs -> hf f ss
+    hsetSubsetI :: hf f ss -> hf f rs -> hf f rs
 
     hsubsetC :: Lens (hf f rs) (hf f rs) (hf f ss) (hf f ss)
-    hsubsetC = lens (hgetSubsetC @hf @ss @rs @is) (flip (hsetSubsetC @hf @ss @rs @is))
+    hsubsetC = lens (hgetSubsetI @hf @ss @rs @is) (flip (hsetSubsetI @hf @ss @rs @is))
 
 
 type HSubset :: forall k. HTyConK k -> [k] -> [k] -> Constraint
@@ -41,11 +41,11 @@ type HReorder hf ss rs = (HSubset hf ss rs, HSubset hf rs ss)
 hgetSubset :: forall ss rs hf f.
     HSubset hf ss rs
     => hf f rs -> hf f ss
-hgetSubset = hgetSubsetC @hf @ss @rs @(IndexesOf ss rs)
+hgetSubset = hgetSubsetI @hf @ss @rs @(IndexesOf ss rs)
 
 
 hsetSubset :: forall ss rs hf f. HSubset hf ss rs => hf f ss -> hf f rs -> hf f rs
-hsetSubset = hsetSubsetC @hf @ss @rs @(IndexesOf ss rs)
+hsetSubset = hsetSubsetI @hf @ss @rs @(IndexesOf ss rs)
 
 
 hsubset :: forall ss rs hf f.

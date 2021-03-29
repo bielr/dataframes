@@ -4,17 +4,17 @@ module Data.Heterogeneous.Class.HFoldable where
 import Data.Heterogeneous.TypeLevel
 
 
-type HFoldable :: forall {k}. HTyConK k -> Constraint
+type HFoldable :: forall {k}. HTyConK k -> [k] -> Constraint
 
-class HFoldable hf where
-    hfoldr :: forall r f as.
+class HFoldable hf as where
+    hfoldr :: forall r f.
         (forall a. f a -> r -> r)
         -> r
         -> hf f as
         -> r
     hfoldr f = hifoldr \_ -> f
 
-    hfoldr2 :: forall r f g as.
+    hfoldr2 :: forall r f g.
         (forall a. f a -> g a -> r -> r)
         -> r
         -> hf f as
@@ -22,13 +22,13 @@ class HFoldable hf where
         -> r
     hfoldr2 f = hifoldr2 \_ -> f
 
-    hifoldr :: forall r f as.
+    hifoldr :: forall r f.
         (forall i. i < Length as => SNat i -> f (as !! i) -> r -> r)
         -> r
         -> hf f as
         -> r
 
-    hifoldr2 :: forall r f g as.
+    hifoldr2 :: forall r f g.
         (forall i. i < Length as => SNat i -> f (as !! i) -> g (as !! i) -> r -> r)
         -> r
         -> hf f as
@@ -36,7 +36,7 @@ class HFoldable hf where
         -> r
 
 
-    hfoldl' :: forall r f as.
+    hfoldl' :: forall r f.
         (forall a. r -> f a -> r)
         -> r
         -> hf f as
@@ -47,7 +47,7 @@ class HFoldable hf where
         f' fa k z = k $! f z fa
 
 
-    hifoldl' :: forall r f as.
+    hifoldl' :: forall r f.
         (forall i. i < Length as => r -> SNat i -> f (as !! i) -> r)
         -> r
         -> hf f as
@@ -58,7 +58,7 @@ class HFoldable hf where
         f' i fa k z = k $! f z i fa
 
 
-    hfoldl2' :: forall r f g as.
+    hfoldl2' :: forall r f g.
         (forall a. r -> f a -> g a -> r)
         -> r
         -> hf f as
@@ -70,7 +70,7 @@ class HFoldable hf where
         f' fa ga k z = k $! f z fa ga
 
 
-    hifoldl2' :: forall r f g as.
+    hifoldl2' :: forall r f g.
         (forall i. i < Length as => r -> SNat i -> f (as !! i) -> g (as !! i) -> r)
         -> r
         -> hf f as
@@ -83,7 +83,7 @@ class HFoldable hf where
 
 
 htoListWith ::
-    HFoldable hf
+    HFoldable hf as
     => (forall a. f a -> b)
     -> hf f as
     -> [b]
@@ -92,7 +92,7 @@ htoListWith f = hfoldr (\fa r -> f fa : r) []
 
 
 hitoListWith ::
-    HFoldable hf
+    HFoldable hf as
     => (forall i. i < Length as => SNat i -> f (as !! i) -> b)
     -> hf f as
     -> [b]
@@ -101,7 +101,7 @@ hitoListWith f = hifoldr (\i fa r -> f i fa : r) []
 
 
 htraverse_ ::
-    (HFoldable hf, Applicative g)
+    (HFoldable hf as, Applicative g)
     => (forall a. f a -> g ())
     -> hf f as
     -> g ()
@@ -110,7 +110,7 @@ htraverse_ f = hfoldr (\fa r -> f fa *> r) (pure ())
 
 
 htraverse2_ ::
-    (HFoldable hf, Applicative h)
+    (HFoldable hf as, Applicative h)
     => (forall a. f a -> g a -> h ())
     -> hf f as
     -> hf g as
@@ -120,8 +120,8 @@ htraverse2_ f = hfoldr2 (\fa ga r -> f fa ga *> r) (pure ())
 
 
 hitraverse_ ::
-    (HFoldable hf, Applicative g)
-    => (forall i. SNat i -> f (as !! i) -> g ())
+    (HFoldable hf as, Applicative g)
+    => (forall i. i < Length as => SNat i -> f (as !! i) -> g ())
     -> hf f as
     -> g ()
 hitraverse_ f = hifoldr (\i fa r -> f i fa *> r) (pure ())
@@ -129,8 +129,8 @@ hitraverse_ f = hifoldr (\i fa r -> f i fa *> r) (pure ())
 
 
 hitraverse2_ ::
-    (HFoldable hf, Applicative h)
-    => (forall i. SNat i -> f (as !! i) -> g (as !! i) -> h ())
+    (HFoldable hf as, Applicative h)
+    => (forall i. i < Length as => SNat i -> f (as !! i) -> g (as !! i) -> h ())
     -> hf f as
     -> hf g as
     -> h ()

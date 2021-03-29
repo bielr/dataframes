@@ -95,6 +95,8 @@ library
       Data.Frame.TH.Expr
       Data.Frame.TypeIndex
       Data.Functor.Boilerplate
+      Data.Heterogeneous.Class.HApply
+      Data.Heterogeneous.Class.HCoerce
       Data.Heterogeneous.Class.HConv
       Data.Heterogeneous.Class.HCreate
       Data.Heterogeneous.Class.HDistributive
@@ -127,8 +129,16 @@ library
       Data.Indexer
   other-modules:
       Paths_dataframes
-      Data.Heterogeneous.HTuple.HTuple
-      Data.Heterogeneous.HTuple.HTupleInstances
+      Data.Heterogeneous.HTuple.Types
+      Data.Heterogeneous.HTuple.Instances
+      Data.Heterogeneous.HTuple.Instances.HCoerce
+      Data.Heterogeneous.HTuple.Instances.HCreate
+      Data.Heterogeneous.HTuple.Instances.HDistributive
+      Data.Heterogeneous.HTuple.Instances.HFoldable
+      Data.Heterogeneous.HTuple.Instances.HFunctor
+      Data.Heterogeneous.HTuple.Instances.HGetI
+      Data.Heterogeneous.HTuple.Instances.HSetI
+      Data.Heterogeneous.HTuple.Instances.HTraversable
   hs-source-dirs: src
 
 executable dataframes-exe

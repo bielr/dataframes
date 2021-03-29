@@ -15,6 +15,7 @@ import Data.Traversable (forM)
 
 import Data.Heterogeneous.Constraints
 import Data.Heterogeneous.Class.Member
+import Data.Heterogeneous.Class.HApply
 import Data.Heterogeneous.Class.HCreate
 import Data.Heterogeneous.Class.HFoldable
 import Data.Heterogeneous.Class.HFunctor
@@ -129,18 +130,13 @@ instance HCreate HList as => HCreate HList (a ': as) where
     {-# inline hcreateA #-}
 
 
-instance HFunctor HList where
+instance HFunctor HList as where
     hmap _ HNil        = HNil
     hmap h (fa :& fas) = h fa :& hmap h fas
     {-# inline hmap #-}
 
 
-    hzipWith _ HNil        HNil        = HNil
-    hzipWith h (fa :& fas) (fb :& fbs) = h fa fb :& hzipWith h fas fbs
-    {-# inline hzipWith #-}
-
-
-    himap :: forall as f g.
+    himap :: forall f g.
         (forall i. i < Length as => SNat i -> f (as !! i) -> g (as !! i))
         -> HList f as
         -> HList g as
@@ -156,7 +152,13 @@ instance HFunctor HList where
     {-# inline himap #-}
 
 
-    hizipWith :: forall as f g h.
+instance HApply HList as where
+    hzipWith _ HNil        HNil        = HNil
+    hzipWith h (fa :& fas) (fb :& fbs) = h fa fb :& hzipWith h fas fbs
+    {-# inline hzipWith #-}
+
+
+    hizipWith :: forall f g h.
         (forall i. i < Length as => SNat i -> f (as !! i) -> g (as !! i) -> h (as !! i))
         -> HList f as
         -> HList g as
@@ -173,7 +175,7 @@ instance HFunctor HList where
     {-# inline hizipWith #-}
 
 
-instance HFoldable HList where
+instance HFoldable HList as where
     hfoldr _ z HNil = z
     hfoldr f z (fa :& fas) = f fa (hfoldr f z fas)
     {-# inline hfoldr #-}
@@ -184,7 +186,7 @@ instance HFoldable HList where
     {-# inline hfoldr2 #-}
 
 
-    hifoldr :: forall as f r.
+    hifoldr :: forall f r.
         (forall i. i < Length as => SNat i -> f (as !! i) -> r -> r)
         -> r
         -> HList f as
@@ -201,7 +203,7 @@ instance HFoldable HList where
     {-# inline hifoldr #-}
 
 
-    hifoldr2 :: forall as f g r.
+    hifoldr2 :: forall f g r.
         (forall i. i < Length as => SNat i -> f (as !! i) -> g (as !! i) -> r -> r)
         -> r
         -> HList f as
@@ -219,10 +221,27 @@ instance HFoldable HList where
     {-# inline hifoldr2 #-}
 
 
-instance HTraversable HList where
+instance HTraversable HList as where
     htraverse _ HNil        = pure HNil
     htraverse h (fa :& fas) = liftA2 (:&) (h fa) (htraverse h fas)
     {-# inline htraverse #-}
+
+
+    hitraverse :: forall f g h.
+        Applicative h
+        => (forall i. i < Length as => SNat i -> f (as !! i) -> h (g (as !! i)))
+        -> HList f as
+        -> h (HList g as)
+    hitraverse h = go zeroNat
+      where
+        go :: forall j. SNat j -> HList f (Drop j as) -> h (HList g (Drop j as))
+        go !_ HNil      = pure HNil
+        go !j (a :& as) =
+            assuming (eqDropIndex @j @as) $
+            assuming (eqDropNext @j @as) $
+            assuming (leDropLength @j @as) $
+                liftA2 (:&) (h j a) (go (succNat j) as)
+    {-# inline hitraverse #-}
 
 
     htraverse2 _ HNil HNil               = pure HNil
@@ -230,9 +249,28 @@ instance HTraversable HList where
     {-# inline htraverse2 #-}
 
 
+    hitraverse2 :: forall f f' g h.
+        Applicative h
+        => (forall i. i < Length as => SNat i -> f (as !! i) -> f' (as !! i) -> h (g (as !! i)))
+        -> HList f as
+        -> HList f' as
+        -> h (HList g as)
+    hitraverse2 h = go zeroNat
+      where
+        go :: forall j. SNat j -> HList f (Drop j as) -> HList f' (Drop j as) -> h (HList g (Drop j as))
+        go !_ HNil      HNil      = pure HNil
+        go !j (a :& as) (b :& bs) =
+            assuming (eqDropIndex @j @as) $
+            assuming (eqDropNext @j @as) $
+            assuming (leDropLength @j @as) $
+                liftA2 (:&) (h j a b) (go (succNat j) as bs)
+    {-# inline hitraverse2 #-}
+
+
 instance TypeError
     ('Text "There is no HIxed instance for HList because performance is really bad for the most common use case. Use hlistIx manually instead")
-    => HIxed HList where
+    => HIxed HList as where
+    hix' _ = error "No instance HIxed HList"
     hix _ = error "No instance HIxed HList"
 
 
@@ -252,13 +290,13 @@ instance
     )
     => HSubseqI HList '[] ss' rs rs' '[] where
 
-    hsubseqC f rs = (`happend` rs) <$> f HNil
-    {-# inline hsubseqC #-}
+    hsubseqI f rs = (`happend` rs) <$> f HNil
+    {-# inline hsubseqI #-}
 
 
 instance rs' ~ rs => HQuotientI HList '[] rs rs' '[] where
-    hsubseqSplitC = L.iso (\rs -> (HNil, rs)) (\(HNil, rs) -> rs)
-    {-# inline hsubseqSplitC #-}
+    hsubseqSplitI = L.iso (\rs -> (HNil, rs)) (\(HNil, rs) -> rs)
+    {-# inline hsubseqSplitI #-}
 
 
 -- delete ss
@@ -271,8 +309,8 @@ instance
     )
     => HSubseqI HList (s ': ss) '[] (r ': rs) rs' ('Zero ': is') where
 
-    hsubseqC = after htail (hsubseqC @HList @_ @_ @_ @_ @dec_is')
-    {-# inline hsubseqC #-}
+    hsubseqI = after htail (hsubseqI @HList @_ @_ @_ @_ @dec_is')
+    {-# inline hsubseqI #-}
 
 
 instance
@@ -283,13 +321,13 @@ instance
     )
     => HQuotientI HList (s ': ss) (r ': rs) rs' ('Zero ': is') where
 
-    hsubseqSplitC =
+    hsubseqSplitI =
         hunconsed
-        . L.mapping (hsubseqSplitC @HList @_ @_ @_ @dec_is')
+        . L.mapping (hsubseqSplitI @HList @_ @_ @_ @dec_is')
         . L.iso (uncurry consl) (L._1 huncons)
       where
         consl s (!ss, !rs') = (s :& ss, rs')
-    {-# inline hsubseqSplitC #-}
+    {-# inline hsubseqSplitI #-}
 
 
 -- replace nonempty ss with nonempty ss'
@@ -303,8 +341,8 @@ instance
     )
     => HSubseqI HList (s ': ss) (s' ': ss') (r ': rs) (r' ': rs') ('Zero ': is') where
 
-    hsubseqC = preserving hconsed (after htail (hsubseqC @HList @_ @_ @_ @_ @dec_is'))
-    {-# inline hsubseqC #-}
+    hsubseqI = preserving hconsed (after htail (hsubseqI @HList @_ @_ @_ @_ @dec_is'))
+    {-# inline hsubseqI #-}
 
 
 instance
@@ -315,8 +353,8 @@ instance
     )
     => HSubseqI HList ss ss' (r ': rs) (r' ': rs') ('Succ i ': is') where
 
-    hsubseqC = htail . hsubseqC @HList @_ @_ @_ @_ @(i ': dec_is')
-    {-# inline hsubseqC #-}
+    hsubseqI = htail . hsubseqI @HList @_ @_ @_ @_ @(i ': dec_is')
+    {-# inline hsubseqI #-}
 
 _testSubseqInstance :: ()
 _testSubseqInstance = testSubseqInstance @HList
@@ -330,13 +368,13 @@ instance
     )
     => HQuotientI HList ss (r ': rs) (r' ': rs') ('Succ i ': is') where
 
-    hsubseqSplitC =
+    hsubseqSplitI =
         hunconsed
-        . L.mapping (hsubseqSplitC @HList @_ @_ @_ @(i ': dec_is'))
+        . L.mapping (hsubseqSplitI @HList @_ @_ @_ @(i ': dec_is'))
         . L.iso (uncurry consr) (L._2 huncons)
       where
         consr r (!ss, !rs') = (ss, r :& rs')
-    {-# inline hsubseqSplitC #-}
+    {-# inline hsubseqSplitI #-}
 
 
 

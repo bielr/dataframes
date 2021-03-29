@@ -86,6 +86,8 @@ type ZippedWith f xs ys zs =
     ( zs ~ ZipWith f xs ys
     , xs ~ UnZipWith1 f zs
     , ys ~ UnZipWith2 f zs
+    , Length zs ~ Length xs
+    , Length zs ~ Length ys
     )
 
 

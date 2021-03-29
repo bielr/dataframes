@@ -8,12 +8,19 @@ import Data.Heterogeneous.TypeLevel
 
 -- Traversable-like records
 
-type HTraversable :: forall k. HTyConK k -> Constraint
+type HTraversable :: forall k. HTyConK k -> [k] -> Constraint
 
-class (HFunctor hf, HFoldable hf) => HTraversable hf where
+class (HFunctor hf as, HFoldable hf as) => HTraversable hf as where
     htraverse ::
         Applicative g
         => (forall a. f a -> g (h a))
+        -> hf f as
+        -> g (hf h as)
+    htraverse f = hitraverse \_ a -> f a
+
+    hitraverse ::
+        Applicative g
+        => (forall i. i < Length as => SNat i -> f (as !! i) -> g (h (as !! i)))
         -> hf f as
         -> g (hf h as)
 
@@ -23,8 +30,16 @@ class (HFunctor hf, HFoldable hf) => HTraversable hf where
         -> hf f as
         -> hf f' as
         -> g (hf h as)
+    htraverse2 f = hitraverse2 \_ a b -> f a b
 
-hsequence :: (HTraversable hf, Applicative g) => hf (g :. f) as -> g (hf f as)
+    hitraverse2 ::
+        Applicative g
+        => (forall i. i < Length as => SNat i -> f (as !! i) -> f' (as !! i) -> g (h (as !! i)))
+        -> hf f as
+        -> hf f' as
+        -> g (hf h as)
+
+hsequence :: (HTraversable hf as, Applicative g) => hf (g :. f) as -> g (hf f as)
 hsequence = htraverse getCompose
 {-# inline hsequence #-}
 

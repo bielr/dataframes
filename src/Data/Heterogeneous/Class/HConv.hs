@@ -15,8 +15,8 @@ type HConv :: forall {k}. HTyConK k -> HTyConK k -> [k] -> Constraint
 class HConv hf hg as where
     hconv :: hf f as -> hg f as
 
-    default hconv :: (HIxed hf, HCreate hg as) => hf f as -> hg f as
-    hconv hf = hcreate \i -> view (hix i) hf
+    default hconv :: (HIxed hf as, HCreate hg as) => hf f as -> hg f as
+    hconv hf = hcreate \i -> view (hix' i) hf
 
 
 hconvTo :: forall hg hf f as. HConv hf hg as => hf f as -> hg f as

@@ -22,6 +22,7 @@ import Text.Show (showListWith)
 import Unsafe.Coerce (unsafeCoerce)
 
 import Data.Heterogeneous.Constraints
+import Data.Heterogeneous.Class.HApply
 import Data.Heterogeneous.Class.HConv
 import Data.Heterogeneous.Class.HCreate
 import Data.Heterogeneous.Class.HDistributive
@@ -31,12 +32,12 @@ import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.HTraversable
 import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.Subseq
+import Data.Heterogeneous.Class.Subset
 import Data.Heterogeneous.Class.TupleView
 import Data.Heterogeneous.HList qualified as HList
 import Data.Heterogeneous.HTuple.TH
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
-import Data.Heterogeneous.TypeLevel.Subset
 
 
 -- SmallArray-based record type
@@ -119,7 +120,7 @@ createA n f =
 {-# rules "createA/createST" createA = createST #-}
 
 
-unsafeIndex :: HSmallArray f as -> SNat i -> f (as !! i)
+unsafeIndex :: HSmallArray f as -> SNat i -> f a
 unsafeIndex (HSmallArray arr) i = unsafeCoerce $ SA.indexSmallArray arr (snat i)
 
 
@@ -127,12 +128,8 @@ index :: i < Length as => HSmallArray f as -> SNat i -> f (as !! i)
 index = unsafeIndex
 
 
-setIndex :: i < Length as => HSmallArray f as -> SNat i -> f (as !! i) -> HSmallArray f as
-setIndex (HSmallArray arr) i !fa =
-    HSmallArray $ SA.runSmallArray do
-        marr <- SA.thawSmallArray arr 0 (SA.sizeofSmallArray arr)
-        SA.writeSmallArray marr (snat i) (unsafeCoerce fa)
-        return marr
+indexViaSubseq :: IsSubseqI '[a] as '[i] => HSmallArray f as -> SNat i -> f a
+indexViaSubseq = unsafeIndex
 
 
 unsafeSetIndex :: HSmallArray f as -> SNat i -> f a -> HSmallArray f bs
@@ -143,21 +140,25 @@ unsafeSetIndex (HSmallArray arr) i !fa = do
         return marr
 
 
-size :: HSmallArray f as -> SNat (Length as)
-size (HSmallArray arr) = SNat (SA.sizeofSmallArray arr)
-
-
-_get :: forall a as f. KnownPeano (IndexOf a as) => HSmallArray f as -> f a
-_get harrf =
-    unsafeCoerce $ unsafeIndex harrf (getSNat @(IndexOf a as))
-
-
-_set :: forall a b as bs f. KnownPeano (IndexOf a as) => HSmallArray f as -> f b -> HSmallArray f bs
-_set (HSmallArray arr) !fb =
+setIndex :: i < Length as => HSmallArray f as -> SNat i -> f (as !! i) -> HSmallArray f as
+setIndex (HSmallArray arr) i !fa =
     HSmallArray $ SA.runSmallArray do
         marr <- SA.thawSmallArray arr 0 (SA.sizeofSmallArray arr)
-        SA.writeSmallArray marr (peanoInt @(IndexOf a as)) (unsafeCoerce fb)
+        SA.writeSmallArray marr (snat i) (unsafeCoerce fa)
         return marr
+
+
+setIndexViaSubseq ::
+    ReplaceSubseqI '[a] '[b] as bs '[i]
+    => HSmallArray f as
+    -> SNat i
+    -> f b
+    -> HSmallArray f bs
+setIndexViaSubseq = unsafeSetIndex
+
+
+size :: HSmallArray f as -> SNat (Length as)
+size (HSmallArray arr) = SNat (SA.sizeofSmallArray arr)
 
 
 unsafeIndexAll :: forall is ss rs f.
@@ -167,10 +168,13 @@ unsafeIndexAll :: forall is ss rs f.
     => HSmallArray f rs
     -> HSmallArray f ss
 unsafeIndexAll (HSmallArray arr) =
-    HSmallArray $
-        SA.smallArrayFromListN (peanoInt @(Length ss)) $
-            foldr (\ !x xs -> x : xs) [] $
-                map (SA.indexSmallArray arr) (peanoInts @is)
+    HSmallArray $ SA.runSmallArray do
+        marr <- SA.newSmallArray (peanoInt @(Length ss)) (uninitializedElement "unsafeIndexAll")
+
+        L.iforM_ (peanoInts @is) \i j ->
+            SA.writeSmallArray marr i $! SA.indexSmallArray arr j
+
+        return marr
 
 
 getSubseq :: forall is ss rs f.
@@ -183,33 +187,31 @@ getSubseq :: forall is ss rs f.
 getSubseq = unsafeIndexAll @is
 
 
-_getSubset :: forall ss rs f.
-    ( IsSubsetWithError ss rs
-    , KnownPeanos (IndexesOf ss rs)
+getSubset :: forall is ss rs f.
+    ( IndexAll rs is ~ ss
+    , KnownPeanos is
     , KnownLength ss
     )
     => HSmallArray f rs
     -> HSmallArray f ss
-_getSubset = unsafeIndexAll @(IndexesOf ss rs)
+getSubset = unsafeIndexAll @is
 
 
-_setSubset :: forall ss rs f.
-    ( KnownPeanos (IndexesOf ss rs)
+setSubset :: forall is ss rs f.
+    ( IndexAll rs is ~ ss
+    , KnownPeanos is
     , KnownLength ss
     )
-    => HSmallArray f rs
-    -> HSmallArray f ss
+    => HSmallArray f ss
     -> HSmallArray f rs
-_setSubset (HSmallArray arr) (HSmallArray upd) =
+    -> HSmallArray f rs
+setSubset (HSmallArray upd) (HSmallArray arr) =
     HSmallArray $ SA.runSmallArray do
         marr <- SA.thawSmallArray arr 0 (SA.sizeofSmallArray arr)
 
-        let go []       !_i = return ()
-            go (ix:ixs) !i  = do
-                SA.writeSmallArray marr ix $! SA.indexSmallArray upd i
-                go ixs (i+1)
+        L.iforM_ (peanoInts @is) \j i ->
+            SA.writeSmallArray marr i $! SA.indexSmallArray upd j
 
-        go (peanoInts @(IndexesOf ss rs)) 0
         return marr
 
 
@@ -250,7 +252,8 @@ instance
     )
     => HGetI HSmallArray a as i where
 
-    hgetC harrf = unsafeIndex harrf (getSNat @i)
+    hgetI harrf = unsafeIndex harrf (getSNat @i)
+    {-# inline hgetI #-}
 
 
 instance
@@ -261,12 +264,15 @@ instance
     )
     => HSetI HSmallArray a b as bs i where
 
-    hsetC fa harrf = unsafeSetIndex harrf (getSNat @i) fa
+    hsetI fa harrf = unsafeSetIndex harrf (getSNat @i) fa
+    {-# inline hsetI #-}
 
 
-instance HIxed HSmallArray where
-    hix i = L.lens (`index` i) (`setIndex` i)
+instance HIxed HSmallArray as where
+    hix i = L.lens (`indexViaSubseq` i) (`setIndexViaSubseq` i)
     {-# inline hix #-}
+    hix' i = L.lens (`index` i) (`setIndex` i)
+    {-# inline hix' #-}
 
 
 instance HSingleton HSmallArray where
@@ -302,17 +308,19 @@ instance KnownLength as => HCreate HSmallArray as where
     {-# inline hcreateA #-}
 
 
-instance HFunctor HSmallArray where
+instance HFunctor HSmallArray as where
     himap h harrf =
         create (size harrf) \i -> h i (index harrf i)
     {-# inline himap #-}
 
+
+instance HApply HSmallArray as where
     hizipWith h harrf harrg =
         create (size harrf) \i -> h i (index harrf i) (index harrg i)
     {-# inline hizipWith #-}
 
 
-instance HFoldable HSmallArray where
+instance HFoldable HSmallArray as where
     hifoldr f z harr =
         foldrNatInts (size harr) (\i r -> f i (index harr i) r) z
     {-# inline hifoldr #-}
@@ -322,18 +330,29 @@ instance HFoldable HSmallArray where
     {-# inline hifoldr2 #-}
 
 
-instance HTraversable HSmallArray where
-    htraverse h harrf =
-        createA (size harrf) \i -> h (index harrf i)
-    {-# inline htraverse #-}
+instance HTraversable HSmallArray as where
+    hitraverse h harrf =
+        createA (size harrf) \i -> h i (index harrf i)
+    {-# inline hitraverse #-}
 
-    htraverse2 h harrf harrg =
-        createA (size harrf) \i -> h (index harrf i) (index harrg i)
-    {-# inline htraverse2 #-}
+    hitraverse2 h harrf harrg =
+        createA (size harrf) \i -> h i (index harrf i) (index harrg i)
+    {-# inline hitraverse2 #-}
 
 
 instance KnownLength as => HDistributive HSmallArray as
 
+
+
+instance
+    ( KnownPeanos is
+    , KnownLength ss
+    , IndexAll rs is ~ ss
+    )
+    => HSubsetI HSmallArray ss rs is where
+
+    hgetSubsetI = getSubset @is
+    hsetSubsetI = setSubset @is
 
 
 instance
@@ -347,7 +366,7 @@ instance
     )
     => HSubseqI HSmallArray ss ss' rs rs' is where
 
-    hsubseqC = L.lens (getSubseq @is) \(HSmallArray ars) (HSmallArray ass') ->
+    hsubseqI = L.lens (getSubseq @is) \(HSmallArray ars) (HSmallArray ass') ->
         let
           replace :: Int -> [Int] -> [Any] -> [Any] -> [Any]
           replace !_ _  rs []  = rs
@@ -362,7 +381,7 @@ instance
               replace 0 (peanoInts @is) (toList ars) (toList ass')
         in
           HSmallArray ars'
-    {-# inlinable hsubseqC #-}
+    {-# inlinable hsubseqI #-}
 
 
 _testSubseqInstance :: ()
@@ -380,7 +399,7 @@ instance
     )
     => HQuotientI HSmallArray ss rs rs' is where
 
-    hsubseqSplitC = L.iso
+    hsubseqSplitI = L.iso
         (\(HSmallArray ars) ->
             let
               split :: Int -> [Any] -> [Int] -> ([Any], [Any])
@@ -390,7 +409,7 @@ instance
                 | i == j    = case split (i+1) rs js  of (!ss, !rs') -> (r : ss, rs')
                 | otherwise = case split (i+1) rs jjs of (!ss, !rs') -> (ss, r : rs')
 
-              split !_ [] (_:_) = error "hsubseqSplitC @HSmallArray: split: the impossible happened"
+              split !_ [] (_:_) = error "hsubseqSplitI @HSmallArray: split: the impossible happened"
             in
               case split 0 (toList ars) (peanoInts @is) of
                 (ss, rs') -> (HSmallArray $ SA.smallArrayFromListN (peanoInt @(Length ss)) ss,
@@ -405,12 +424,12 @@ instance
               | i == j    = s : merge (i+1) js ss rrs'
               | otherwise = r : merge (i+1) jjs sss rs'
 
-            merge !_ [] (_:_) _ = error "hsubseqSplitC @HSmallArray: merge: the impossible happened"
-            merge !_ (_:_) [] _ = error "hsubseqSplitC @HSmallArray: merge: the impossible happened"
+            merge !_ [] (_:_) _ = error "hsubseqSplitI @HSmallArray: merge: the impossible happened"
+            merge !_ (_:_) [] _ = error "hsubseqSplitI @HSmallArray: merge: the impossible happened"
           in
             HSmallArray $ SA.smallArrayFromListN (peanoInt @(Length rs)) $
                 merge 0 (peanoInts @is) (toList ass) (toList ars'))
-    {-# inlinable hsubseqSplitC #-}
+    {-# inlinable hsubseqSplitI #-}
 
 
 instance KnownLength as => HConv HList.HList HSmallArray as where

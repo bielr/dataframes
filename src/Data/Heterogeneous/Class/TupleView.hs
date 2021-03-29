@@ -5,7 +5,7 @@ import Control.Lens (Iso, iso)
 
 import Data.Heterogeneous.Class.HConv
 import Data.Heterogeneous.Constraints
-import Data.Heterogeneous.HTuple.HTuple
+import Data.Heterogeneous.HTuple.Types
 import Data.Heterogeneous.TypeLevel
 
 

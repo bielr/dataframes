@@ -11,6 +11,8 @@ module Data.Frame.Kind
   , FieldTypeExp
 
   , FieldsK
+  , ZippedFields
+
   , RecK
   , FrameK
   ) where
@@ -19,7 +21,8 @@ import GHC.TypeLits       as Exports (Symbol, TypeError, ErrorMessage(..))
 import Data.Kind          as Exports (Constraint, Type)
 import Data.Type.Bool     as Exports
 import Data.Type.Equality as Exports (type (==))
-import Fcf.Core
+
+import Data.Heterogeneous.TypeLevel
 
 
 -- kinds
@@ -28,6 +31,7 @@ data FieldK = Symbol :> Type
 
 type (:>) :: Symbol -> Type -> FieldK
 type (:>) = '(:>)
+
 
 type FieldName :: FieldK -> Symbol
 type family FieldName col where
@@ -42,12 +46,20 @@ type FieldNameExp :: FieldK -> Exp Symbol
 data FieldNameExp col :: Exp Symbol
 type instance Eval (FieldNameExp col) = FieldName col
 
+
 type FieldTypeExp :: FieldK -> Exp Type
 data FieldTypeExp col :: Exp Type
 type instance Eval (FieldTypeExp col) = FieldType col
 
 
 type FieldsK = [FieldK]
-type RecK = (FieldK -> Type) -> FieldsK -> Type
 
+type ZippedFields :: [Symbol] -> [Type] -> FieldsK -> Constraint
+type ZippedFields ss as cols =
+    ( ZippedWith (:>) ss as cols
+    , ss ~ Eval (FMap FieldNameExp cols)
+    , as ~ Eval (FMap FieldTypeExp cols)
+    )
+
+type RecK = HTyConK FieldK
 type FrameK = FieldsK -> Type

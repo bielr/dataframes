@@ -5,6 +5,7 @@ module Data.Heterogeneous.TypeLevel.Kind
   , KindOf
   , Nat
   , HTyConK
+  , HPolyTyConK
   , NAryTyConK
   ) where
 
@@ -21,6 +22,10 @@ type KindOf (a :: k) = k
 
 type HTyConK :: Type -> Type
 type HTyConK k = (k -> Type) -> [k] -> Type
+
+
+type HPolyTyConK :: Type
+type HPolyTyConK = forall k. HTyConK k
 
 
 type NAryTyConK :: Peano -> Type -> Type -> Type

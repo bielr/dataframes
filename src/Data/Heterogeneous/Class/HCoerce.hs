@@ -7,57 +7,102 @@ import GHC.Exts (Proxy#, proxy#)
 import Data.Coerce
 import Data.Type.Coercion
 
+import Data.Heterogeneous.Functors
 import Data.Heterogeneous.TypeLevel
 
 
-type HCoerce :: forall {k1}. (forall k. HTyConK k) -> [k1] -> Constraint
+type HCoerce :: forall k. HPolyTyConK -> [k] -> Constraint
+
+
+infix 4 :~>:
+
+type (:~>:) :: Type -> Type -> Type
+type (:~>:) = Coercion
+
 
 type NatCoercion :: forall {k1} {k2}. (k1 -> Type) -> (k2 -> Type) -> (k1 -> Exp k2) -> Type
-type NatCoercion f g h = forall a. Coercion (f a) (g (Eval (h a)))
+type NatCoercion f g h = forall a. f a :~>: g (Eval (h a))
 
 
-class HCoerce (hf :: forall k. HTyConK k) (as :: [k1]) where
-    hliftCoercion ::
-        Coercion f g
-        -> Coercion (hf f as) (hf g as)
+class HCoerce (hf :: HPolyTyConK) (as :: [k]) where
+    hliftCo ::
+        NatCoercion f g Pure
+        -> hf f as :~>: hf g as
 
-    hliftCoercionF :: forall {k2} (f :: k1 -> Type) (g :: k2 -> Type) (h :: k1 -> Exp k2).
+    hliftExpCo :: forall {k'} (f :: k -> Type) (g :: k' -> Type) (h :: k -> Exp k').
         Proxy# h
         -> NatCoercion f g h
         -> Coercion (hf f as) (hf g (Eval (FMap h as)))
 
 
-hgcoerceWith :: forall (hf :: forall k. HTyConK k) as r f g.
+hconInCo :: forall (hf :: HPolyTyConK) as fas f g.
+    ( HCoerce hf as
+    , Mapped f as fas
+    , forall a b. Coercible a b => Coercible (g a) (g b)
+    )
+    => hf (g :. f) as :~>: hf g fas
+hconInCo = hliftExpCo (proxy# @(Pure1 f)) Coercion
+{-# inline hconInCo #-}
+
+
+hconOutCo :: forall (hf :: HPolyTyConK) as fas f g.
+    ( HCoerce hf as
+    , Mapped f as fas
+    , forall a b. Coercible a b => Coercible (g a) (g b)
+    )
+    => hf g fas :~>: hf (g :. f) as
+hconOutCo = sym hconInCo
+{-# inline hconOutCo #-}
+
+
+hIdLCo :: forall (hf :: HPolyTyConK) as f.
     HCoerce hf as
-    => Coercion f g
+    => hf (Identity :. f) as
+    :~>: hf f as
+hIdLCo = hliftCo Coercion
+{-# inline hIdLCo #-}
+
+
+hIdRCo :: forall (hf :: HPolyTyConK) as f.
+    ( HCoerce hf as
+    , forall a b. Coercible a b => Coercible (f a) (f b)
+    )
+    => hf (f :. Identity) as :~>: hf f as
+hIdRCo = hliftCo Coercion
+{-# inline hIdRCo #-}
+
+
+hgcoerceWith :: forall (hf :: HPolyTyConK) as r f g.
+    HCoerce hf as
+    => NatCoercion f g Pure
     -> (Coercible (hf f as) (hf g as) => r)
     -> r
-hgcoerceWith co = gcoerceWith (hliftCoercion co)
+hgcoerceWith co = gcoerceWith (hliftCo co)
 {-# inline hgcoerceWith #-}
 
 
-hcoerceWith :: forall f g (hf :: forall k. HTyConK k) as.
+hcoerceWith :: forall f g (hf :: HPolyTyConK) as.
     HCoerce hf as
-    => Coercion f g
+    => NatCoercion f g Pure
     -> hf f as
     -> hf g as
 hcoerceWith co = hgcoerceWith @hf @as co coerce
 {-# inline hcoerceWith #-}
 
 
-hgcoerceWithF :: forall (hf :: forall k. HTyConK k) as h r f g.
+hgcoerceExpWith :: forall (hf :: HPolyTyConK) as h r f g.
     HCoerce hf as
     => NatCoercion f g h
     -> (Coercible (hf f as) (hf g (Eval (FMap h as))) => r)
     -> r
-hgcoerceWithF co = gcoerceWith (hliftCoercionF (proxy# @h) co)
-{-# inline hgcoerceWithF #-}
+hgcoerceExpWith co = gcoerceWith (hliftExpCo (proxy# @h) co)
+{-# inline hgcoerceExpWith #-}
 
 
-hcoerceWithF :: forall h f g (hf :: forall k. HTyConK k) as.
+hcoerceExpWith :: forall h f g (hf :: HPolyTyConK) as.
     HCoerce hf as
     => NatCoercion f g h
     -> hf f as
     -> hf g (Eval (FMap h as))
-hcoerceWithF co = hgcoerceWithF @hf @as @h co coerce
-{-# inline hcoerceWithF #-}
+hcoerceExpWith co = hgcoerceExpWith @hf @as @h co coerce
+{-# inline hcoerceExpWith #-}

@@ -7,9 +7,12 @@
 {-# language UndecidableInstances #-}
 module Data.Frame.Impl.ColVectors where
 
-import GHC.Exts (proxy#)
+import Prelude hiding ((.))
+
+import GHC.Exts (IsList, proxy#)
 import GHC.Stack
 
+import Control.Category (Category(..))
 import Control.Lens hiding ((:>))
 import Control.Monad
 import Control.Monad.ST qualified as ST
@@ -33,6 +36,7 @@ import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.Subseq
 import Data.Heterogeneous.Class.TupleView
 import Data.Heterogeneous.Constraints
+import Data.Heterogeneous.Functors
 import Data.Heterogeneous.HSmallArray (HSmallArray)
 import Data.Heterogeneous.HTuple
 import Data.Heterogeneous.TypeLevel
@@ -42,9 +46,10 @@ import Type.Errors
 type Column :: FieldK -> Type
 newtype Column col = Column (Vector (FieldType col))
 
-
 type MutableColumn :: Type -> FieldK -> Type
 newtype MutableColumn s col = MutableColumn (MVector s (FieldType col))
+
+deriving newtype instance IsList (Vector (FieldType col)) => IsList (Column col)
 
 
 type Columns :: FieldsK -> Type
@@ -57,7 +62,7 @@ type MutableColumns s cols = HSmallArray (MutableColumn s) cols
 
 type Frame :: FrameK
 data Frame cols = Frame
-    { _nrow :: !Int
+    { _nrow    :: !Int
     , _columns :: !(Columns cols)
     }
 
@@ -125,6 +130,24 @@ frameOfLength n =
 {-# inline frameOfLength #-}
 
 
+
+infixr 0 =.
+infixr 0 =..
+
+
+(=.) :: (IsNameProxy s proxy, Coercible a (f (s :> a))) => proxy -> a -> f (s :> a)
+_ =. a = Field a
+
+
+(=..) :: (IsNameProxy s proxy, Coercible (v a) (f (s :> a))) => proxy -> v a -> f (s :> a)
+_ =.. as = Column as
+
+
+asCol :: IsNameProxy s proxy => proxy -> Vector a -> Column (s :> a)
+asCol _ = Column
+{-# inline asCol #-}
+
+
 newCol :: forall s a cols proxy.
     ( IsNameProxy s proxy
     , KnownDataType Frame a
@@ -135,7 +158,6 @@ newCol :: forall s a cols proxy.
     -> Column (s :> a)
 newCol _ df@(Frame n _) (FrameEnv rww) =
     Column (VG.generate n (runRowwise rww df))
-
 
 
 prependCol :: forall s a cols proxy.
@@ -179,6 +201,27 @@ newtype FieldWriter s col = FieldWriter
     }
 
 
+fromCols :: forall cols t cs.
+    ( TupleView HSmallArray cols
+    , IsTupleOf cs t
+    , Mapped Column cols cs
+    , HCoerce HTuple cols
+    , All (KnownField Frame) cols
+    )
+    => t
+    -> Maybe (Frame cols)
+fromCols t =
+    let cols = fromHTuple (coerceWith (hIdLCo . hconOutCo . htupleCo) t)
+
+        lengths = hitoListWith (constrained @(KnownField Frame) @cols \(Column v) -> VG.length v) cols
+    in
+        case lengths of
+            []     -> Just (Frame 0 cols)
+            (l:ls)
+              | all (==l) ls -> Just (Frame l cols)
+              | otherwise    -> Nothing
+
+
 transmute :: forall cols' ss' as cols t proxy.
     ( IsNameProxy ss' proxy
     , KnownLength cols'
@@ -188,8 +231,7 @@ transmute :: forall cols' ss' as cols t proxy.
     , TupleView HSmallArray cols'
 
     , IsTupleOf as t
-    , ZippedWith (:>) ss' as cols'
-    , as ~ Eval (FMap FieldTypeExp cols')
+    , ZippedFields ss' as cols'
 
     , All (KnownField Frame) cols'
 

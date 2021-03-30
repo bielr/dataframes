@@ -16,17 +16,17 @@ $(forTH [0..maxInstances] \n -> do
 
     [d|
         instance HCoerce HTuple $(gen_listTy cxt) where
-            hliftCoercion co =
-                $(foldr
-                    (\_ty r -> [| case co of Coercion -> $r |])
-                    [| Coercion |]
-                    (gen_aTys cxt))
-            {-# inline hliftCoercion #-}
-
-            hliftCoercionF _ co =
+            hliftCo co =
                 $(foldr
                     (\aTy r -> [| case co @($aTy) of Coercion -> $r |])
                     [| Coercion |]
                     (gen_aTys cxt))
-            {-# inline hliftCoercionF #-}
+            {-# inline hliftCo #-}
+
+            hliftExpCo _ co =
+                $(foldr
+                    (\aTy r -> [| case co @($aTy) of Coercion -> $r |])
+                    [| Coercion |]
+                    (gen_aTys cxt))
+            {-# inline hliftExpCo #-}
       |])

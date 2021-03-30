@@ -3,6 +3,7 @@ module Data.Heterogeneous.TypeLevel.Apply
     ( Eval
     , Exp
     , Pure
+    , Pure1
     , FMap
 
     , UnApply
@@ -22,7 +23,7 @@ module Data.Heterogeneous.TypeLevel.Apply
 
 import GHC.TypeLits
 import Fcf.Core
-import Fcf.Combinators (Pure)
+import Fcf.Combinators (Pure, Pure1)
 import Fcf.Class.Functor (FMap)
 
 import Data.Heterogeneous.TypeLevel.Kind
@@ -47,9 +48,7 @@ type instance Eval (UnApplyExp f y) = UnApply f y
 
 
 type Map :: (i -> j) -> [i] -> [j]
-type family Map f xs where
-    Map _       '[] = '[]
-    Map f (x ': xs) = f x ': Map f xs
+type Map f xs = Eval (FMap (Pure1 f) xs)
 
 
 type UnMap :: (i -> j) -> [j] -> [i]
@@ -86,8 +85,6 @@ type ZippedWith f xs ys zs =
     ( zs ~ ZipWith f xs ys
     , xs ~ UnZipWith1 f zs
     , ys ~ UnZipWith2 f zs
-    , Length zs ~ Length xs
-    , Length zs ~ Length ys
     )
 
 

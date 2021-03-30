@@ -1,3 +1,4 @@
+{-# language GeneralizedNewtypeDeriving #-}
 {-# language UndecidableInstances #-}
 module Data.Frame.DataTypes.Vector
   ( VectorMode(..)
@@ -12,6 +13,7 @@ module Data.Frame.DataTypes.Vector
   , Vector
   ) where
 
+import GHC.Exts (IsList(..))
 import Control.Lens qualified as L
 import Data.Vector.Generic.Lens (vectorIx)
 
@@ -86,7 +88,6 @@ newtype MVector s a = MVector (MVectorTypeOf a s a)
 type Vector :: Type -> Type
 newtype Vector a = Vector (VectorTypeOf a a)
 
-
 type instance VG.Mutable Vector = MVector
 
 
@@ -114,6 +115,9 @@ instance VG.Vector (VectorTypeOf a) a => VG.Vector Vector a where
     basicUnsafeIndexM (Vector v) i          = VG.basicUnsafeIndexM v i
     basicUnsafeCopy (MVector mv) (Vector v) = VG.basicUnsafeCopy mv v
     elemseq (Vector v) a b                  = VG.elemseq v a b
+
+
+deriving newtype instance IsList (VectorTypeOf a a) => IsList (Vector a)
 
 
 type instance L.Index (Vector a) = Int

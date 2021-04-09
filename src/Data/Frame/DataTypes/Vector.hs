@@ -117,7 +117,11 @@ instance VG.Vector (VectorTypeOf a) a => VG.Vector Vector a where
     elemseq (Vector v) a b                  = VG.elemseq v a b
 
 
-deriving newtype instance IsList (VectorTypeOf a a) => IsList (Vector a)
+deriving newtype instance
+    ( IsList (VectorTypeOf a a)
+    , Item (VectorTypeOf a a) ~ a
+    )
+    => IsList (Vector a)
 
 
 type instance L.Index (Vector a) = Int

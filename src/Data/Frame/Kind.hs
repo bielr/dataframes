@@ -27,10 +27,12 @@ import Data.Heterogeneous.TypeLevel
 
 -- kinds
 
-data FieldK = Symbol :> Type
+data FieldK = Symbol :⊳ Type
 
+-- If we use different symbols (the ASCII one is more accessible) then GHC will
+-- not use 'Data.Kind.:> in type errors if both are in scope!
 type (:>) :: Symbol -> Type -> FieldK
-type (:>) = '(:>)
+type (:>) = '(:⊳)
 
 
 type FieldName :: FieldK -> Symbol

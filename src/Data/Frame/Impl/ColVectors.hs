@@ -9,7 +9,7 @@ module Data.Frame.Impl.ColVectors where
 
 import Prelude hiding ((.))
 
-import GHC.Exts (IsList, proxy#)
+import GHC.Exts (IsList)
 import GHC.Stack
 
 import Control.Category (Category(..))
@@ -17,6 +17,7 @@ import Control.Lens hiding ((:>))
 import Control.Monad
 import Control.Monad.ST qualified as ST
 import Control.Rowwise
+import Data.Coerce
 import Data.Type.Coercion
 import Data.Vector.Generic qualified as VG
 import Data.Vector.Generic.Lens (vectorTraverse)
@@ -36,11 +37,9 @@ import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.Subseq
 import Data.Heterogeneous.Class.TupleView
 import Data.Heterogeneous.Constraints
-import Data.Heterogeneous.Functors
 import Data.Heterogeneous.HSmallArray (HSmallArray)
 import Data.Heterogeneous.HTuple
 import Data.Heterogeneous.TypeLevel
-import Type.Errors
 
 
 type Column :: FieldK -> Type
@@ -135,11 +134,11 @@ infixr 0 =.
 infixr 0 =..
 
 
-(=.) :: (IsNameProxy s proxy, Coercible a (f (s :> a))) => proxy -> a -> f (s :> a)
+(=.) :: IsNameProxy s proxy => proxy -> a -> Field (s :> a)
 _ =. a = Field a
 
 
-(=..) :: (IsNameProxy s proxy, Coercible (v a) (f (s :> a))) => proxy -> v a -> f (s :> a)
+(=..) :: IsNameProxy s proxy => proxy -> Vector a -> Column (s :> a)
 _ =.. as = Column as
 
 
@@ -148,40 +147,31 @@ asCol _ = Column
 {-# inline asCol #-}
 
 
-newCol :: forall s a cols proxy.
-    ( IsNameProxy s proxy
-    , KnownDataType Frame a
-    )
-    => proxy
+newCol ::
+    KnownField Frame col
+    => Frame cols
+    -> Env Frame cols (Field col)
+    -> Column col
+newCol df@(Frame n _) (FrameEnv rww) =
+    Column (VG.generate n (coerce (runRowwise rww df)))
+
+
+prependCol ::
+    KnownField Frame col
+    => Env Frame cols (Field col)
     -> Frame cols
-    -> Env Frame cols a
-    -> Column (s :> a)
-newCol _ df@(Frame n _) (FrameEnv rww) =
-    Column (VG.generate n (runRowwise rww df))
+    -> Frame (col ': cols)
+prependCol env df@(Frame n cols) =
+    Frame n (newCol df env `hcons` cols)
 
 
-prependCol :: forall s a cols proxy.
-    ( IsNameProxy s proxy
-    , KnownDataType Frame a
-    )
-    => proxy
-    -> Env Frame cols a
+appendCol ::
+    KnownField Frame col
+    => Env Frame cols (Field col)
     -> Frame cols
-    -> Frame ((s :> a) ': cols)
-prependCol proxy env df@(Frame n cols) =
-    Frame n (newCol proxy df env `hcons` cols)
-
-
-appendCol :: forall s a cols proxy.
-    ( IsNameProxy s proxy
-    , KnownDataType Frame a
-    )
-    => proxy
-    -> Env Frame cols a
-    -> Frame cols
-    -> Frame (cols ++ '[s :> a])
-appendCol proxy env df@(Frame n cols) =
-    Frame n (cols `hsnoc` newCol proxy df env)
+    -> Frame (cols ++ '[col])
+appendCol env df@(Frame n cols) =
+    Frame n (cols `hsnoc` newCol df env)
 
 
 restricting :: forall is cols1' cols2' cols1 cols2 proxy.
@@ -222,48 +212,30 @@ fromCols t =
               | otherwise    -> Nothing
 
 
-transmute :: forall cols' ss' as cols t proxy.
-    ( IsNameProxy ss' proxy
-    , KnownLength cols'
+transmute :: forall cols' cols t.
+    ( KnownLength cols'
 
     , HCoerce HTuple cols'
     , HTraversable HTuple cols'
     , TupleView HSmallArray cols'
 
-    , IsTupleOf as t
-    , ZippedFields ss' as cols'
+    , IsTupleOf (TupleMembers t) t
+    , Mapped Field cols' (TupleMembers t)
 
     , All (KnownField Frame) cols'
-
-    , WhenStuck (ForcePeano (Length cols'))
-        (DelayError
-            ('Text "Could not match names "
-                ':<>: 'ShowType ss'
-                ':<>: 'Text " with types in "
-                ':<>: 'ShowType (TupleMembers t)))
     )
-    => proxy
-    -> Env Frame cols t
+    => Env Frame cols t
     -> Frame cols
     -> Frame cols'
-transmute _ (FrameEnv rww) df@(Frame n _) = ST.runST do
+transmute (FrameEnv rww) df@(Frame n _) = ST.runST do
     let tupleGen :: Int -> t
         !tupleGen = runRowwise rww df
 
-        liftCo :: Coercion a b -> Coercion (x -> a) (x -> b)
-        liftCo Coercion = Coercion
-
-        htupleGen :: Int -> HTuple Identity (TupleMembers t)
-        !htupleGen = coerceWith (liftCo htupleCo) tupleGen
-
-        fieldCo :: NatCoercion Field Identity FieldTypeExp
-        !fieldCo = Coercion
+        fieldCo :: t :~>: HTuple Field cols'
+        !fieldCo = hIdLCo . hconOutCo . htupleCo
 
         fieldsGen :: Int -> HTuple Field cols'
-        !fieldsGen =
-            coerceWith
-                (sym (liftCo (hliftCoercionF (proxy# @FieldTypeExp) fieldCo)))
-                htupleGen
+        !fieldsGen = gcoerceWith fieldCo (coerce tupleGen)
 
     mcols' <- initMVs
 

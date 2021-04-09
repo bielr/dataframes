@@ -70,6 +70,8 @@ common shared-properties
     , hashable
     , hashable
     , hashtables
+    , haskell-src-exts
+    , haskell-src-meta
     , lens
     , primitive
     , profunctors
@@ -139,7 +141,8 @@ library
       Data.Heterogeneous.HTuple.Instances.HGetI
       Data.Heterogeneous.HTuple.Instances.HSetI
       Data.Heterogeneous.HTuple.Instances.HTraversable
-  hs-source-dirs: src
+  hs-source-dirs:
+      src
 
 executable dataframes-exe
   import: shared-properties

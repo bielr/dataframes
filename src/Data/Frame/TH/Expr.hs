@@ -7,8 +7,14 @@ import Data.Foldable (foldl')
 import Data.HashTable.IO qualified as HT
 import Data.Ratio (Ratio)
 import Data.Word (Word8)
+import Language.Haskell.Exts.Extension        qualified as Exts
+import Language.Haskell.Exts.Parser           qualified as Exts
+import Language.Haskell.Meta.Parse            qualified as Meta
+import Language.Haskell.Meta.Syntax.Translate qualified as Meta
 import Language.Haskell.TH.Lib
+import Language.Haskell.TH.Quote
 import Language.Haskell.TH.Syntax
+import Text.Read (readMaybe)
 
 import Data.Frame.Class (col)
 
@@ -109,8 +115,8 @@ instance HasExps TypeFamilyHead
 instance HasExps a => HasExps (TyVarBndr a)
 
 
-rowwise :: Q Exp -> Q Exp
-rowwise qe = do
+env :: Q Exp -> Q Exp
+env qe = do
     e <- qe
 
     names :: HT.BasicHashTable String Name <- runIO $ HT.new
@@ -134,3 +140,39 @@ rowwise qe = do
             ]
 
     foldl' (\f fld -> [| $f <*> $fld |]) [|pure $lam|] fields
+
+
+getParseModeFromContext :: Q Exts.ParseMode
+getParseModeFromContext = do
+    exts <- map convExt <$> extsEnabled
+
+    return Exts.defaultParseMode
+        { Exts.parseFilename = "Frame environment expression"
+        , Exts.baseLanguage = Exts.HaskellAllDisabled
+        , Exts.extensions = exts
+        -- , fixities = x
+        }
+  where
+    reinterpretExt :: Extension -> Either String Exts.KnownExtension
+    reinterpretExt e =
+        let s = show e
+        in maybe (Left s) Right (readMaybe s)
+
+    convExt :: Extension -> Exts.Extension
+    convExt e =
+        case reinterpretExt e of
+            Right k -> Exts.EnableExtension k
+            Left u -> Exts.UnknownExtension u
+
+
+eval :: QuasiQuoter
+eval = QuasiQuoter
+    { quoteExp = \s -> do
+        mode <- getParseModeFromContext
+        case Meta.parseResultToEither (Exts.parseExpWithMode mode s) of
+            Right e  -> env (return (Meta.toExp e))
+            Left err -> fail err
+    , quotePat = \_ -> fail "pattern quasiquotes are not supported"
+    , quoteType = \_ -> fail "type quasiquotes are not supported"
+    , quoteDec = \_ -> fail "declaration quasiquotes are not supported"
+    }

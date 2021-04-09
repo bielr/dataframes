@@ -94,6 +94,7 @@ library
       Data.Frame.Impl.ColVectors
       Data.Frame.Kind
       Data.Frame.Pipe
+      Data.Frame.Plugin
       Data.Frame.TH.Expr
       Data.Frame.TypeIndex
       Data.Functor.Boilerplate
@@ -143,6 +144,10 @@ library
       Data.Heterogeneous.HTuple.Instances.HTraversable
   hs-source-dirs:
       src
+      plugin
+  build-depends:
+      ghc
+      , uniplate
 
 executable dataframes-exe
   import: shared-properties

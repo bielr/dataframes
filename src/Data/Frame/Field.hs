@@ -21,6 +21,7 @@ import qualified Data.Vector.Generic.Mutable as VGM
 import qualified Data.Vector.Unboxed         as VU
 
 import Data.Frame.Kind
+import Data.Frame.DataTypes.VectorMode
 
 
 type Field :: FieldK -> Type
@@ -65,6 +66,7 @@ instance VG.Vector VU.Vector (FieldType col) => VG.Vector VU.Vector (Field col) 
 
 
 instance VU.Unbox (FieldType col) => VU.Unbox (Field col)
+type instance VectorModeOf (Field col) = VectorModeOf (FieldType col)
 
 
 instance RemoveBoilerplate Field where

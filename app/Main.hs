@@ -16,15 +16,12 @@ import Data.Text (Text)
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.HTuple
 import Data.Frame.Class
-import Data.Frame.DataTypes.Vector qualified as DT
 import Data.Frame.Impl.ColVectors
 import Data.Frame.Kind
 import Data.Frame.Pipe qualified as Pipe
-import Data.Frame.TH.Expr (env, eval)
+import Data.Frame.TH.Expr (env)
 import Data.Frame.TypeIndex
 
-
-type instance DT.VectorModeOf Text = 'DT.Boxed
 
 
 -- test :: Env Frame '["a":>Int, "b":>Char, "c":>Double] Double

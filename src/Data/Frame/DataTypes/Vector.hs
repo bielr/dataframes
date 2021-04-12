@@ -1,10 +1,7 @@
 {-# language GeneralizedNewtypeDeriving #-}
 {-# language UndecidableInstances #-}
 module Data.Frame.DataTypes.Vector
-  ( VectorMode(..)
-  , SVectorMode(..)
-  , KnownVectorMode(..)
-  , VectorModeOf
+  ( module Data.Frame.DataTypes.VectorMode
   , VectorType
   , MVectorType
   , VectorTypeOf
@@ -24,42 +21,8 @@ import Data.Vector.Primitive       qualified as VP
 import Data.Vector.Storable        qualified as VS
 import Data.Vector.Unboxed         qualified as VU
 
-import Data.Frame.Field
 import Data.Frame.Kind
-
-
-data VectorMode = Boxed | Primitive | Unboxed | Storable
-
-
-type SVectorMode :: VectorMode -> Type
-
-data SVectorMode vm where
-    SBoxed     :: SVectorMode 'Boxed
-    SPrimitive :: SVectorMode 'Primitive
-    SStorable  :: SVectorMode 'Storable
-    SUnboxed   :: SVectorMode 'Unboxed
-
-
-type KnownVectorMode :: VectorMode -> Constraint
-
-class KnownVectorMode vm where
-    sVectorMode :: SVectorMode vm
-
-instance KnownVectorMode 'Boxed      where sVectorMode = SBoxed
-instance KnownVectorMode 'Primitive  where sVectorMode = SPrimitive
-instance KnownVectorMode 'Storable   where sVectorMode = SStorable
-instance KnownVectorMode 'Unboxed    where sVectorMode = SUnboxed
-
-
-type VectorModeOf :: Type -> VectorMode
-type family VectorModeOf a
-type instance VectorModeOf (Field col) = VectorModeOf (FieldType col)
-type instance VectorModeOf Bool        = 'Unboxed
-type instance VectorModeOf Char        = 'Unboxed
-type instance VectorModeOf Int         = 'Unboxed
-type instance VectorModeOf Float       = 'Unboxed
-type instance VectorModeOf Double      = 'Unboxed
-type instance VectorModeOf [a]         = 'Boxed
+import Data.Frame.DataTypes.VectorMode
 
 
 type VectorType :: VectorMode -> Type -> Type
@@ -88,8 +51,8 @@ newtype MVector s a = MVector (MVectorTypeOf a s a)
 type Vector :: Type -> Type
 newtype Vector a = Vector (VectorTypeOf a a)
 
-type instance VG.Mutable Vector = MVector
 
+type instance VG.Mutable Vector = MVector
 
 instance VGM.MVector (MVectorTypeOf a) a => VGM.MVector MVector a where
     basicLength (MVector v)                     = VGM.basicLength v

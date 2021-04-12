@@ -28,6 +28,7 @@ import Data.Frame.DataTypes.Vector
 import Data.Frame.Field
 import Data.Frame.Kind
 import Data.Frame.TypeIndex
+import Data.Indexer
 import Data.Heterogeneous.Class.HCoerce
 import Data.Heterogeneous.Class.HCreate
 import Data.Heterogeneous.Class.HMonoid
@@ -42,17 +43,12 @@ import Data.Heterogeneous.HTuple
 import Data.Heterogeneous.TypeLevel
 
 
-type Column :: FieldK -> Type
-newtype Column col = Column (Vector (FieldType col))
-
 type MutableColumn :: Type -> FieldK -> Type
 newtype MutableColumn s col = MutableColumn (MVector s (FieldType col))
 
-deriving newtype instance IsList (Vector (FieldType col)) => IsList (Column col)
-
 
 type Columns :: FieldsK -> Type
-type Columns cols = HSmallArray Column cols
+type Columns cols = HSmallArray (Column Frame) cols
 
 
 type MutableColumns :: Type -> FieldsK -> Type
@@ -72,44 +68,60 @@ class (VG.Vector Vector a, KnownVectorMode (VectorModeOf a)) => KnownDataType_ a
 instance (VG.Vector Vector a, KnownVectorMode (VectorModeOf a)) => KnownDataType_ a
 
 
-colVector :: Iso (Column (s :> a)) (Column (s :> b)) (Vector a) (Vector b)
+colVector :: Iso (Column Frame (s :> a)) (Column Frame (s :> b)) (Vector a) (Vector b)
 colVector = coerced
 
 
 colValues ::
-    (KnownDataType Frame a, KnownDataType Frame b)
-    => IndexedTraversal Int (Column (s :> a)) (Column (s :> b)) a b
+    ( KnownDataType Frame a
+    , KnownDataType Frame b
+    )
+    => IndexedTraversal Int (Column Frame (s :> a)) (Column Frame (s :> b)) a b
 colValues = colVector.vectorTraverse
 
 
-instance IsFrame Frame HSmallArray where
+instance IsFrame Frame where
     type KnownDataType Frame = KnownDataType_
+
+    frameLength (Frame n _) = n
+
+    type Record Frame = HSmallArray
+
+    newtype instance Column Frame col = Column (Vector (FieldType col))
+
+    colFields = colVector.asIndexer
 
     -- type Env :: FieldsK -> Type -> Type -> Type
     -- type role Env nominal nominal nominal representational
     newtype Env Frame cols a = FrameEnv (Rowwise (Frame cols) a)
         deriving newtype (Functor, Applicative)
 
+    runEnv df@(Frame n _) (FrameEnv rww) = Indexer n $! runRowwise rww df
 
-    col :: forall i col cols proxy.
-        ( IsFieldsProxy cols i proxy
-        , KnownField Frame col
-        , HGetI HSmallArray col cols i
-        )
-        => proxy
-        -> Env Frame cols (FieldType col)
-    col _ =
+
+deriving newtype instance IsList (Vector (FieldType col)) => IsList (Column Frame col)
+
+
+instance (KnownField Frame col, HGetI HSmallArray col cols i) => GetCol Frame col cols i where
+    getCol _ =
         FrameEnv $ unsafeRowwise \(Frame _ cols) ->
             let Column v = hgetI @_ @_ @_ @i cols
                 !i       = VG.unsafeIndex v
             in i
 
 
+instance Columnar Frame HSmallArray cols where
+    unsafeFromColsLength = Frame
+    toCols (Frame _ cols) = cols
+
+
+
+
 checkLengths :: HasCallStack => Int -> Int -> Int
 checkLengths !n !m
   | n == m    = n
   | otherwise = error $
-        "Frame.checkLength: data frame length mismatch: " ++ show n ++ " /= " ++ show m
+        "data frame length mismatch: " ++ show n ++ " /= " ++ show m
 {-# inline checkLengths #-}
 
 
@@ -130,28 +142,11 @@ frameOfLength n =
 
 
 
-infixr 0 =.
-infixr 0 =..
-
-
-(=.) :: IsNameProxy s proxy => proxy -> a -> Field (s :> a)
-_ =. a = Field a
-
-
-(=..) :: IsNameProxy s proxy => proxy -> Vector a -> Column (s :> a)
-_ =.. as = Column as
-
-
-asCol :: IsNameProxy s proxy => proxy -> Vector a -> Column (s :> a)
-asCol _ = Column
-{-# inline asCol #-}
-
-
 newCol ::
     KnownField Frame col
     => Frame cols
     -> Env Frame cols (Field col)
-    -> Column col
+    -> Column Frame col
 newCol df@(Frame n _) (FrameEnv rww) =
     Column (VG.generate n (coerce (runRowwise rww df)))
 
@@ -191,25 +186,28 @@ newtype FieldWriter s col = FieldWriter
     }
 
 
-fromCols :: forall cols t cs.
-    ( TupleView HSmallArray cols
-    , IsTupleOf cs t
-    , Mapped Column cols cs
-    , HCoerce HTuple cols
-    , All (KnownField Frame) cols
-    )
-    => t
-    -> Maybe (Frame cols)
-fromCols t =
-    let cols = fromHTuple (coerceWith (hIdLCo . hconOutCo . htupleCo) t)
-
-        lengths = hitoListWith (constrained @(KnownField Frame) @cols \(Column v) -> VG.length v) cols
-    in
-        case lengths of
-            []     -> Just (Frame 0 cols)
-            (l:ls)
-              | all (==l) ls -> Just (Frame l cols)
-              | otherwise    -> Nothing
+-- fromCols :: forall cols t cs.
+--     ( TupleView HSmallArray cols
+--     , IsTupleOf cs t
+--     , Mapped Column cols cs
+--     , HCoerce HTuple cols
+--     , All (KnownField Frame) cols
+--     )
+--     => t
+--     -> Maybe (Frame cols)
+-- fromCols colsTup =
+--     let colsArr :: HSmallArray Column cols
+--         colsArr = fromHTuple $ coerceWith (hIdLCo . hconOutCo . htupleCo) colsTup
+--
+--         lengths :: HSmallArray Column cols -> [Int]
+--         lengths = hitoListWith $
+--             constrained @(KnownField Frame) @cols \(Column v) -> VG.length v
+--     in
+--         case lengths colsArr of
+--             []     -> Just (Frame 0 colsArr)
+--             (l:ls)
+--               | all (==l) ls -> Just (Frame l colsArr)
+--               | otherwise    -> Nothing
 
 
 transmute :: forall cols' cols t.
@@ -258,7 +256,7 @@ transmute (FrameEnv rww) df@(Frame n _) = ST.runST do
 
     freezeCols ::
         HSmallArray (MutableColumn s) cols'
-        -> ST.ST s (HSmallArray Column cols')
+        -> ST.ST s (HSmallArray (Column Frame) cols')
     freezeCols =
         hitraverse $
             constrained @(KnownField Frame) @cols' \(MutableColumn mv) ->

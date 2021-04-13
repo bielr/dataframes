@@ -75,7 +75,6 @@ common shared-properties
     , haskell-src-exts
     , haskell-src-meta
     , lens
-    , prettyprinter
     , primitive
     , profunctors
     , tagged

@@ -61,9 +61,11 @@ common shared-properties
       -fexpose-all-unfoldings
   build-depends:
       base >=4.7 && <5
+    , bytestring
     , comonad
     , constraints
     , containers
+    , deepseq
     , distributive
     , first-class-families
     , ghc-prim
@@ -73,6 +75,7 @@ common shared-properties
     , haskell-src-exts
     , haskell-src-meta
     , lens
+    , prettyprinter
     , primitive
     , profunctors
     , tagged
@@ -90,6 +93,8 @@ library
       Control.Rowwise
       Data.Frame.Class
       Data.Frame.DataTypes.Vector
+      Data.Frame.DataTypes.VectorMode
+      Data.Frame.Display
       Data.Frame.Field
       Data.Frame.Impl.ColVectors
       Data.Frame.Kind

@@ -1,9 +1,12 @@
 {-# language AllowAmbiguousTypes #-}
+{-# language MagicHash #-}
 {-# language UndecidableInstances #-}
 {-# language UndecidableSuperClasses #-}
 module Data.Frame.TypeIndex where
 
+import GHC.Exts (Proxy#, proxy#)
 import GHC.OverloadedLabels (IsLabel(..))
+
 import Data.Heterogeneous.HTuple
 import Data.Heterogeneous.TypeLevel
 import Data.Frame.Kind
@@ -62,6 +65,14 @@ fieldNamed = FieldProxy
 
 fieldAt :: forall i rs. FieldProxy rs i
 fieldAt = FieldProxy
+
+
+ofFrame :: df rs -> FieldProxy rs i -> FieldProxy rs i
+ofFrame _ = id
+
+
+fieldProxy :: FieldProxy rs i -> Proxy# (rs !! i)
+fieldProxy _ = proxy#
 
 
 instance

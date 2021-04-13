@@ -89,7 +89,7 @@ instance IsFrame Frame where
 
     newtype instance Column Frame col = Column (Vector (FieldType col))
 
-    colFields = colVector.asIndexer
+    colFields = colVector.asIndexer.coerced
 
     -- type Env :: FieldsK -> Type -> Type -> Type
     -- type role Env nominal nominal nominal representational
@@ -113,8 +113,6 @@ instance (KnownField Frame col, HGetI HSmallArray col cols i) => GetCol Frame co
 instance Columnar Frame HSmallArray cols where
     unsafeFromColsLength = Frame
     toCols (Frame _ cols) = cols
-
-
 
 
 checkLengths :: HasCallStack => Int -> Int -> Int

@@ -9,6 +9,7 @@ import Data.Kind
 import Data.Functor.Compose
 import Data.Functor.Const
 import Data.Functor.Identity
+import Data.Vector qualified as VB
 
 import Fcf.Core
 
@@ -63,6 +64,7 @@ instance RemoveBoilerplate ((->) a)
 instance RemoveBoilerplate (Either e)
 instance RemoveBoilerplate IO
 instance RemoveBoilerplate Maybe
+instance RemoveBoilerplate VB.Vector
 
 
 type Simplify :: (k -> Type) -> k -> Exp Type

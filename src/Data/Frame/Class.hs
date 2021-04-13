@@ -18,7 +18,6 @@ import Data.Frame.Kind
 import Data.Frame.TypeIndex
 import Data.Heterogeneous.Class.HCoerce
 import Data.Heterogeneous.Class.HFoldable
-import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.TupleView
 import Data.Heterogeneous.Constraints
 import Data.Heterogeneous.TypeLevel
@@ -65,6 +64,7 @@ class
     colFields ::
         ( KnownField df col
         , KnownField df col'
+        , FieldName col ~ FieldName col'
         )
         => L.Iso (Column df col) (Column df col') (Indexer (Field col)) (Indexer (Field col'))
 
@@ -75,7 +75,7 @@ class
 
 class
     ( IsFrame df
-    , HGetI (Record df) col cols i
+    , (cols !! i) ~ col
     )
     => GetCol df col cols i where
     getCol :: IsFieldsProxy cols i proxy => proxy -> Env df cols (FieldType col)
@@ -106,11 +106,9 @@ _ =. a = Field a
 
 
 (=..) ::
-    ( IsNameProxy s proxy
-    , Coercible (f a) (Column df (s :> a))
-    )
+    IsNameProxy s proxy
     => proxy
-    -> f a
+    -> Column df (s :> a)
     -> Column df (s :> a)
 _ =.. fa = coerce fa
 
@@ -135,7 +133,7 @@ fromColsMaybe cols =
               | otherwise    -> Nothing
 
 
-fromCols_ ::
+fromCols_ :: forall df cols hf map_column_cols t.
     ( HFoldable hf cols
     , Columnar df hf cols
     , All (KnownField df) cols

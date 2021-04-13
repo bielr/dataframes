@@ -6,10 +6,12 @@ module Data.Heterogeneous.Constraints
   ( Constraint
   , Dict(..)
   , TrueC
+  , ComposeExpC
   , ComposeC
   , FoldConstraints
   , Tupled(..)
   , All
+  , AllE
   , AllF
   , constrained
   , iconstrained
@@ -28,14 +30,22 @@ class TrueC a
 instance TrueC a
 
 
-type ComposeC :: forall k j. (j -> Constraint) -> (k -> j) -> k -> Constraint
+type ComposeExpC :: forall k j. (j -> Constraint) -> (k -> Exp j) -> k -> Constraint
 
-class c (f a) => ComposeC c f a
-instance c (f a) => ComposeC c f a
+class c (Eval (f a)) => ComposeExpC c f a
+instance c (Eval (f a)) => ComposeExpC c f a
+
+
+type ComposeC :: forall k j. (j -> Constraint) -> (k -> j) -> k -> Constraint
+type ComposeC c f = ComposeExpC c (Pure1 f)
 
 
 type All :: forall k. (k -> Constraint) -> [k] -> Constraint
 type All c as = Tupled (Map c as)
+
+
+type AllE :: forall k j. (j -> Constraint) -> (k -> Exp j) -> [k] -> Constraint
+type AllE c f as = All (ComposeExpC c f) as
 
 
 type AllF :: forall k j. (j -> Constraint) -> (k -> j) -> [k] -> Constraint

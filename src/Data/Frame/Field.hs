@@ -1,15 +1,19 @@
+{-# language MagicHash #-}
 {-# language DeriveGeneric #-}
 {-# language GeneralizedNewtypeDeriving #-}
 {-# language RoleAnnotations #-}
 {-# language UndecidableInstances #-}
 module Data.Frame.Field
   ( Field(..)
+  , fieldName
   , field
   , renamed
   , renamedTo
   ) where
 
+import GHC.Exts (Proxy#, proxy#)
 import GHC.Generics (Generic)
+import GHC.TypeLits (KnownSymbol, symbolVal')
 import Foreign.Storable (Storable)
 
 import Control.Lens.Type
@@ -74,6 +78,11 @@ instance RemoveBoilerplate Field where
 
     simplify = getField
     complicate = Field
+
+
+fieldName :: forall col. KnownSymbol (FieldName col) => Proxy# col -> String
+fieldName _ = symbolVal' @(FieldName col) proxy#
+{-# inline fieldName #-}
 
 
 field :: forall s a b. Iso (Field (s :> a)) (Field (s :> b)) a b

@@ -1,9 +1,16 @@
+{-# language MultiWayIf #-}
 {-# language MagicHash #-}
 {-# language TemplateHaskellQuotes #-}
-module Data.Frame.TH.Expr where
+module Data.Frame.TH.Eval
+    ( (?)
+    , env
+    , eval
+    ) where
 
 import GHC.Generics
+
 import Data.Foldable (foldl')
+import Data.IORef
 import Data.HashTable.IO qualified as HT
 import Data.Ratio (Ratio)
 import Data.Word (Word8)
@@ -15,10 +22,11 @@ import Language.Haskell.TH.Lib
 import Language.Haskell.TH.Quote
 import Language.Haskell.TH.Syntax
 import Text.Read (readMaybe)
+import Type.Errors (DelayError, ErrorMessage(..))
 
-import Data.Frame.Class (col)
+import Data.Frame.Class (Env, val)
 
-import Control.Lens (Traversal', _Just, has, forMOf)
+import Control.Lens (Prism', Traversal', _Just, prism, has, forMOf)
 import Language.Haskell.TH.Lens (_ImplicitParamVarE)
 
 
@@ -115,31 +123,69 @@ instance HasExps TypeFamilyHead
 instance HasExps a => HasExps (TyVarBndr a)
 
 
-env :: Q Exp -> Q Exp
-env qe = do
-    e <- qe
-
-    names :: HT.BasicHashTable String Name <- runIO $ HT.new
+replaceImplicitParams :: Exp -> Q (Exp, [(String, Name)])
+replaceImplicitParams e = do
+    colsMapping :: HT.BasicHashTable String Name <- runIO $ HT.new
 
     e' <- forMOf (exps (has _ImplicitParamVarE)) e \(ImplicitParamVarE p) ->
-        runIO (HT.lookup names p) >>= \case
+        runIO (HT.lookup colsMapping p) >>= \case
             Just varName ->
                 return (VarE varName)
             Nothing -> do
                 varName <- newName p
-                runIO $ HT.insert names p varName
+                runIO $ HT.insert colsMapping p varName
                 return (VarE varName)
 
-    varNames <- runIO $ HT.toList names
+    colVarNames <- runIO $ HT.toList colsMapping
+    return (e', colVarNames)
 
-    let lam = lamE [varP varName | (_, varName) <- varNames] (return e')
 
-        fields =
-            [ [e| col $(labelE label) |]
-            | (label, _) <- varNames
-            ]
+(?) :: DelayError ('Text "Data.Frame.TH.Eval.? used outside of $(env)") => xxx -> Env df cols a -> yyy
+(?) = undefined
 
-    foldl' (\f fld -> [| $f <*> $fld |]) [|pure $lam|] fields
+
+replaceSectionR :: Exp -> Q (Exp, [(Name, Exp)])
+replaceSectionR e = do
+    bindsRef :: IORef [(Name, Exp)] <- runIO $ newIORef []
+
+    e' <- forMOf (exps (has (_SectionR '(?)))) e \(InfixE Nothing (VarE _) (Just inner)) -> do
+        bindName <- newName "env"
+        runIO $ modifyIORef' bindsRef ((bindName, inner) :)
+        return (VarE bindName)
+
+    binds <- fmap reverse $ runIO $ readIORef bindsRef
+    return (e', binds)
+  where
+    _SectionR :: Name -> Prism' Exp Exp
+    _SectionR op = prism
+        (\inner -> InfixE Nothing (VarE op) (Just inner))
+        (\outer -> if
+            | InfixE Nothing (VarE op') (Just inner) <- outer
+            , op == op'
+                -> Right inner
+            | otherwise
+                -> Left outer)
+
+
+env :: Q Exp -> Q Exp
+env qe = do
+    e <- qe
+
+    (e', colVarNames) <- replaceImplicitParams e
+
+    (e'', binds) <- replaceSectionR e'
+
+    let varNames = map snd colVarNames ++ map fst binds
+
+        lam = lamE [varP varName | varName <- varNames] (return e'')
+
+        args =
+            [ [e| val $(labelE label) |] | (label, _) <- colVarNames ]
+            ++
+            [return bindExp | (_, bindExp) <- binds]
+
+    foldl' (\f fld -> [| $f <*> $fld |]) [|pure $lam|] args
+
 
 
 getParseModeFromContext :: Q Exts.ParseMode

@@ -30,9 +30,10 @@ import Data.Typeable (Typeable, typeRep)
 import Type.Errors
 
 import Data.Functor.Boilerplate
-import Data.Frame.Class hiding (col)
+import Data.Frame.Class
 import Data.Frame.Field
 import Data.Frame.Kind
+import Data.Frame.Series.Class
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.Class.HFunctor
 import Data.Heterogeneous.Class.HFoldable
@@ -45,7 +46,7 @@ type family PrettyPrintField col where
     PrettyPrintField (s :> a) = 'Text ", " ':<>: 'ShowType (s :> a)
 
 
-type PrettyPrintFields :: FieldsK -> ErrorMessage
+type PrettyPrintFields :: [FieldK] -> ErrorMessage
 type family PrettyPrintFields cols where
     PrettyPrintFields '[]           = 'Text ""
     PrettyPrintFields (col ': cols) =
@@ -54,7 +55,7 @@ type family PrettyPrintFields cols where
             ':<>: PrettyPrintFields cols
 
 
-type PrettyPrintFrameType :: FrameK -> FieldsK -> ErrorMessage
+type PrettyPrintFrameType :: FrameK -> [FieldK] -> ErrorMessage
 type PrettyPrintFrameType df cols =
     'Text "At this point, the type of the data frame is "
     ':$$: 'ShowType df
@@ -206,16 +207,16 @@ justifyCellHeight minH w =
     tail1 f (a :| as) = fmap (a :|) (f as)
 
 
-formatColumn :: forall col df.
-    ( IsFrame df
-    , KnownField df col
+formatSeries :: forall col series.
+    ( IsSeries series
+    , CompatibleField series col
     , Show (FieldType col)
     , Typeable (FieldType col)
     )
     => ShowOptions
-    -> Column df col
+    -> series col
     -> FormattedColumn
-formatColumn opts col =
+formatSeries opts col =
     let (w, h) = (cellMaxWidth opts, cellMaxHeight opts)
 
         toTextCell = clampCellWidth w . clampCellHeight h . textCell
@@ -231,28 +232,28 @@ formatColumn opts col =
             | otherwise     = toTextCell name
 
         values = copyIndexer $
-            fmap (toTextCell . Text.pack . show . getField) $
-                view colFields col
+            fmap (toTextCell . Text.pack . show) $
+                indexSeries col
     in
         justifyColumn opts header values
 
 
-formatColumns :: forall cols hf df.
-    ( IsFrame df
-    , All (KnownField df) cols
+formatColumns :: forall cols hf series.
+    ( IsSeries series
+    , All (CompatibleField series) cols
     , AllE Show FieldTypeExp cols
     , AllE Typeable FieldTypeExp cols
     , HFoldable hf cols
     )
     => ShowOptions
-    -> hf (Column df) cols
+    -> hf series cols
     -> [FormattedColumn]
 formatColumns opts =
     hitoListWith $
-        iconstrained @(KnownField df) @cols $
+        iconstrained @(CompatibleField series) @cols $
             iconstrained @(ComposeExpC Show FieldTypeExp) @cols $
                 constrained @(ComposeExpC Typeable FieldTypeExp) @cols $ \col ->
-                    formatColumn opts col
+                    formatSeries opts col
 
 
 splitByMaxWidthMaybe ::
@@ -360,7 +361,7 @@ defaultShowOptions = ShowOptions
 showFrameWith :: forall cols df hf.
     ( AllE Show FieldTypeExp cols
     , AllE Typeable FieldTypeExp cols
-    , All (KnownField df) cols
+    , CompatibleFields df cols
     , KnownLength cols
 
     , Columnar df hf cols
@@ -383,7 +384,7 @@ showFrameWith opts df = df
 showFrame :: forall cols df hf.
     ( AllE Show FieldTypeExp cols
     , AllE Typeable FieldTypeExp cols
-    , All (KnownField df) cols
+    , CompatibleFields df cols
     , KnownLength cols
 
     , Columnar df hf cols
@@ -398,7 +399,7 @@ showFrame = showFrameWith defaultShowOptions
 printFrameWith :: forall cols df hf.
     ( AllE Show FieldTypeExp cols
     , AllE Typeable FieldTypeExp cols
-    , All (KnownField df) cols
+    , CompatibleFields df cols
     , KnownLength cols
 
     , Columnar df hf cols
@@ -414,7 +415,7 @@ printFrameWith opts = Text.putStrLn . showFrameWith opts
 printFrame :: forall cols df hf.
     ( AllE Show FieldTypeExp cols
     , AllE Typeable FieldTypeExp cols
-    , All (KnownField df) cols
+    , CompatibleFields df cols
     , KnownLength cols
 
     , Columnar df hf cols

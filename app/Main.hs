@@ -22,7 +22,7 @@ import Data.Frame.Display
 import Data.Frame.Impl.ColVectors
 import Data.Frame.Kind
 import Data.Frame.Pipe qualified as Pipe
-import Data.Frame.TH.Expr (env)
+import Data.Frame.TH.Eval
 import Data.Frame.TypeIndex
 
 

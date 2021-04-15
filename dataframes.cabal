@@ -1,11 +1,5 @@
 cabal-version: 3.4
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
---
--- see: https://github.com/sol/hpack
---
--- hash: 450e5f0bc78b0b18120349559bb6e79d3bfff65fdf1f0b138399b63762f0dbe1
-
 name:           dataframes
 version:        0.1.0.0
 description:    Please see the README on GitHub at <https://github.com/bielr/dataframes#readme>
@@ -93,13 +87,15 @@ library
       Data.Frame.Class
       Data.Frame.DataTypes.Vector
       Data.Frame.DataTypes.VectorMode
+      Data.Frame.Series.Class
+      Data.Frame.Series.VectorSeries
       Data.Frame.Display
       Data.Frame.Field
       Data.Frame.Impl.ColVectors
       Data.Frame.Kind
       Data.Frame.Pipe
       Data.Frame.Plugin
-      Data.Frame.TH.Expr
+      Data.Frame.TH.Eval
       Data.Frame.TypeIndex
       Data.Functor.Boilerplate
       Data.Heterogeneous.Class.HApply

@@ -10,10 +10,10 @@ module Data.Frame.Kind
   , FieldNameExp
   , FieldTypeExp
 
-  , FieldsK
   , ZippedFields
 
   , RecK
+  , SeriesK
   , FrameK
   ) where
 
@@ -54,9 +54,7 @@ data FieldTypeExp col :: Exp Type
 type instance Eval (FieldTypeExp col) = FieldType col
 
 
-type FieldsK = [FieldK]
-
-type ZippedFields :: [Symbol] -> [Type] -> FieldsK -> Constraint
+type ZippedFields :: [Symbol] -> [Type] -> [FieldK] -> Constraint
 type ZippedFields ss as cols =
     ( ZippedWith (:>) ss as cols
     , ss ~ Eval (FMap FieldNameExp cols)
@@ -64,4 +62,6 @@ type ZippedFields ss as cols =
     )
 
 type RecK = HTyConK FieldK
-type FrameK = FieldsK -> Type
+
+type SeriesK = FieldK -> Type
+type FrameK = [FieldK] -> Type

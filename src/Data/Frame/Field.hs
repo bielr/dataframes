@@ -6,7 +6,7 @@
 module Data.Frame.Field
   ( Field(..)
   , fieldName
-  , field
+  , fieldValue
   , renamed
   , renamedTo
   ) where
@@ -85,9 +85,9 @@ fieldName _ = symbolVal' @(FieldName col) proxy#
 {-# inline fieldName #-}
 
 
-field :: forall s a b. Iso (Field (s :> a)) (Field (s :> b)) a b
-field = L.coerced
-{-# inline field #-}
+fieldValue :: forall s a b. Iso (Field (s :> a)) (Field (s :> b)) a b
+fieldValue = L.coerced
+{-# inline fieldValue #-}
 
 
 renamed :: forall s t a. Iso' (Field (s :> a)) (Field (t :> a))

@@ -53,7 +53,7 @@ parsedPlugin _ _ =
             -> do
                 row_e <- parseStringAsLHsExpr srcSpan contents
 
-                let env_name = mkQual varName (fsLit "Data.Frame.TH.Expr", fsLit "env")
+                let env_name = mkQual varName (fsLit "Data.Frame.TH.Eval", fsLit "env")
                     env_e = HsVar NoExtField (noLoc env_name)
                     br_e = HsBracket NoExtField (ExpBr NoExtField row_e)
                     splice_e = HsApp NoExtField (noLoc env_e) (noLoc br_e)

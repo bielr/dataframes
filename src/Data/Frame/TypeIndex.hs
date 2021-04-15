@@ -13,13 +13,13 @@ import Data.Frame.Kind
 import Type.Errors
 
 
-type FindFieldIndexByName :: Symbol -> FieldsK -> Peano
+type FindFieldIndexByName :: Symbol -> [FieldK] -> Peano
 type family FindFieldIndexByName s rs where
     FindFieldIndexByName s ((s :> a) ': _) = 'Zero
     FindFieldIndexByName s (r ': rs)       = 'Succ (FindFieldIndexByName s rs)
 
 
-type FindFieldIndexByNameError :: Symbol -> FieldsK -> ErrorMessage
+type FindFieldIndexByNameError :: Symbol -> [FieldK] -> ErrorMessage
 type FindFieldIndexByNameError s rs =
     'Text "Could not find field named "
     ':<>: 'ShowType s
@@ -27,13 +27,13 @@ type FindFieldIndexByNameError s rs =
     ':<>: 'ShowType rs
 
 
-type FindFieldIndex :: Symbol -> FieldsK -> Peano
+type FindFieldIndex :: Symbol -> [FieldK] -> Peano
 type family FindFieldIndex s rs where
     FindFieldIndex s ((s :> a) ': rs) = 'Zero
     FindFieldIndex s (r ': rs)        = 'Succ (FindFieldIndex s rs)
 
 
-type FindFieldIndexError :: FieldK -> FieldsK -> ErrorMessage
+type FindFieldIndexError :: FieldK -> [FieldK] -> ErrorMessage
 type FindFieldIndexError r rs =
     'Text "Could not find field "
     ':<>: 'ShowType r
@@ -43,7 +43,7 @@ type FindFieldIndexError r rs =
 
 -- type-level polymorphic field indexers
 
-type FieldProxy :: FieldsK -> Peano -> Type
+type FieldProxy :: [FieldK] -> Peano -> Type
 data FieldProxy rs i = FieldProxy
 
 
@@ -83,7 +83,7 @@ instance
     fromLabel = FieldProxy
 
 
-type EnsureFieldIndexProxies :: forall ki. FieldsK -> ki -> [Type] -> Constraint
+type EnsureFieldIndexProxies :: forall ki. [FieldK] -> ki -> [Type] -> Constraint
 type family EnsureFieldIndexProxies rs is proxies where
     EnsureFieldIndexProxies rs (i :: Peano)    proxies = proxies ~ '[FieldProxy rs i]
     EnsureFieldIndexProxies rs (is :: [Peano]) proxies = Mapped (FieldProxy rs) is proxies
@@ -96,7 +96,7 @@ type family DesugarFieldProxyTuple ki proxy where
     DesugarFieldProxyTuple [Peano] proxy             = TupleMembers proxy
 
 
-type IsFieldsProxy :: forall {ki}. FieldsK -> ki -> Type -> Constraint
+type IsFieldsProxy :: forall {ki}. [FieldK] -> ki -> Type -> Constraint
 
 class EnsureFieldIndexProxies rs is (DesugarFieldProxyTuple ki proxy)
     => IsFieldsProxy rs (is :: ki) proxy

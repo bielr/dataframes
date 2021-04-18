@@ -24,7 +24,7 @@ elemAt (Indexer _ ia) = ia
 
 
 indexVector :: VG.Vector v a => v a -> Indexer a
-indexVector v = Indexer (VG.length v) (v VG.!)
+indexVector v = Indexer (VG.length v) (v `VG.unsafeIndex`)
 {-# inline indexVector #-}
 
 

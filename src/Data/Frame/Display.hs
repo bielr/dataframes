@@ -364,7 +364,7 @@ showFrameWith :: forall cols df hf.
     , CompatibleFields df cols
     , KnownLength cols
 
-    , Columnar df hf cols
+    , ColumnarFrame df hf cols
     , HFunctor hf cols
     , HFoldable hf cols
     )
@@ -387,7 +387,7 @@ showFrame :: forall cols df hf.
     , CompatibleFields df cols
     , KnownLength cols
 
-    , Columnar df hf cols
+    , ColumnarFrame df hf cols
     , HFunctor hf cols
     , HFoldable hf cols
     )
@@ -402,7 +402,7 @@ printFrameWith :: forall cols df hf.
     , CompatibleFields df cols
     , KnownLength cols
 
-    , Columnar df hf cols
+    , ColumnarFrame df hf cols
     , HFunctor hf cols
     , HFoldable hf cols
     )
@@ -410,6 +410,7 @@ printFrameWith :: forall cols df hf.
     -> df cols
     -> IO ()
 printFrameWith opts = Text.putStrLn . showFrameWith opts
+{-# noinline printFrameWith #-}
 
 
 printFrame :: forall cols df hf.
@@ -418,10 +419,11 @@ printFrame :: forall cols df hf.
     , CompatibleFields df cols
     , KnownLength cols
 
-    , Columnar df hf cols
+    , ColumnarFrame df hf cols
     , HFunctor hf cols
     , HFoldable hf cols
     )
     => df cols
     -> IO ()
 printFrame = Text.putStrLn . showFrame
+{-# noinline printFrame #-}

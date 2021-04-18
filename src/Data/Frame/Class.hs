@@ -9,13 +9,16 @@ import Prelude hiding ((.))
 import Control.Category (Category(..))
 import Data.Coerce
 import Data.Profunctor.Unsafe
+import Data.Type.Coercion
 
 import Data.Frame.Field
 import Data.Frame.Kind
 import Data.Frame.Series.Class
 import Data.Frame.TypeIndex
+import Data.Heterogeneous.Class.HCoerce
 import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Constraints
+import Data.Heterogeneous.HTuple
 import Data.Heterogeneous.TypeLevel
 import Data.Indexer
 
@@ -52,6 +55,30 @@ class
     runEnv :: df cols -> Env df cols a -> Indexer a
 
 
+frameEnvCo :: IsFrame df => (a :~>: b) -> (Env df cols a :~>: Env df cols b)
+frameEnvCo Coercion = Coercion
+
+
+htupleEnvCo :: forall t f df cols cols'.
+    ( IsFrame df
+    , HCoerce HTuple cols'
+    , IsTupleOfF f cols' t
+    )
+    => Env df cols t :~>: Env df cols (HTuple f cols')
+htupleEnvCo =
+    frameEnvCo (hIdLCo . hconOutCo . htupleCo)
+
+
+coerceHTupleEnv :: forall f cols' cols t df.
+    ( IsFrame df
+    , HCoerce HTuple cols'
+    , IsTupleOfF f cols' t
+    )
+    => Env df cols t
+    -> Env df cols (HTuple f cols')
+coerceHTupleEnv = coerceWith htupleEnvCo
+
+
 class
     ( IsFrame df
     , (cols !! i) ~ col
@@ -65,7 +92,7 @@ class
 
     default findColumn ::
         ( IsFieldsProxy cols i proxy
-        , Columnar df hf cols
+        , ColumnarFrame df hf cols
         , HGetI hf col cols i
         )
         => proxy
@@ -86,50 +113,66 @@ class
             <*> getRowIndex
 
 
-class IsFrame df => Columnar df hf cols | df -> hf where
+class IsFrame df => ColumnarFrame df hf cols | df -> hf where
     toCols :: df cols -> hf (Column df) cols
 
 
-class IsFrame df => Append df cols col where
-    appendCol :: df cols -> Env df cols (Field col) -> df (cols ++ '[col])
-    prependCol :: df cols -> Env df cols (Field col) -> df (col ': cols)
+class IsFrame df => FromSingleColumn df where
+    fromSingleCol ::
+        CompatibleDataType (Column df) (FieldType col)
+        => Column df col
+        -> df '[col]
 
 
-class IsFrame df => Transmute df cols hf cols' where
-    transmute :: df cols -> Env df cols (hf Field cols') -> df cols'
+class IsFrame df => ConcatCols df where
+    unsafeConcatCols :: df cols -> df cols' -> df (cols ++ cols')
 
 
-fld :: forall col cols i df proxy.
-    ( IsFieldsProxy cols i proxy
-    , HasColumn df col cols i
-    )
-    => proxy
-    -> Env df cols (Field col)
-fld = findField
+class IsFrame df => AppendCol df where
+    appendCol ::
+        CompatibleDataType (Column df) (FieldType col)
+        => Env df cols (Field col)
+        -> df cols
+        -> df (cols ++ '[col])
 
-val :: forall col cols i df proxy.
-    ( IsFieldsProxy cols i proxy
-    , HasColumn df col cols i
-    )
-    => proxy
-    -> Env df cols (FieldType col)
-val = fmap getField #. fld
+    prependCol ::
+        CompatibleDataType (Column df) (FieldType col)
+        => Env df cols (Field col)
+        -> df cols
+        -> df (col ': cols)
+
+    default appendCol :: forall col cols.
+        ( FromSingleColumn df
+        , ConcatCols df
+        , GenerateSeries (Column df)
+        , CompatibleDataType (Column df) (FieldType col)
+        )
+        => Env df cols (Field col)
+        -> df cols
+        -> df (cols ++ '[col])
+    appendCol env df =
+        unsafeConcatCols df (fromSingleCol newCol)
+      where
+        newCol = generateSeries @_ @col $ fmap getField (runEnv df env)
 
 
-infixr 0 =.
-infixr 0 =..
+    default prependCol :: forall col cols.
+        ( FromSingleColumn df
+        , ConcatCols df
+        , GenerateSeries (Column df)
+        , CompatibleDataType (Column df) (FieldType col)
+        )
+        => Env df cols (Field col)
+        -> df cols
+        -> df (col ': cols)
+    prependCol env df =
+        unsafeConcatCols (fromSingleCol newCol) df
+      where
+        newCol = generateSeries @_ @col $ fmap getField (runEnv df env)
 
 
-(=.) :: IsNameProxy s proxy => proxy -> a -> Field (s :> a)
-_ =. a = Field a
-
-
-(=..) ::
-    IsNameProxy s proxy
-    => proxy
-    -> series (s :> a)
-    -> series (s :> a)
-_ =.. fa = fa
+class (IsFrame df, GenerateSeries (Column df)) => GenerateFrame df hf cols where
+    generateFrame :: CompatibleFields df cols => Indexer (hf Field cols) -> df cols
 
 
 -- record :: forall ss as cols.

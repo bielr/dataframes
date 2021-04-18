@@ -9,6 +9,7 @@ module Data.Heterogeneous.HTuple.Types
   , TupleMembers
   , TupleOf
   , IsTupleOf
+  , IsTupleOfF
   , HTuple(..)
   ) where
 
@@ -155,6 +156,13 @@ instance
     , AppliedTyCon as (TupleTyCon (Length as)) t
     )
     => IsTupleOf as t
+
+
+type IsTupleOfF :: (k -> Type) -> [k] -> Type -> Constraint
+type IsTupleOfF f as t =
+    ( IsTupleOf (TupleMembers t) t
+    , Mapped f as (TupleMembers t)
+    )
 
 
 type HTuple :: forall k. HTyConK k

@@ -95,6 +95,7 @@ library
       Data.Frame.Kind
       Data.Frame.Pipe
       Data.Frame.Plugin
+      Data.Frame.Sugar
       Data.Frame.TH.Eval
       Data.Frame.TypeIndex
       Data.Functor.Boilerplate

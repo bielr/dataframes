@@ -24,7 +24,8 @@ import Language.Haskell.TH.Syntax
 import Text.Read (readMaybe)
 import Type.Errors (DelayError, ErrorMessage(..))
 
-import Data.Frame.Class (Env, val)
+import Data.Frame.Class (Env, findField)
+import Data.Frame.Field (getField)
 
 import Control.Lens (Prism', Traversal', _Just, prism, has, forMOf)
 import Language.Haskell.TH.Lens (_ImplicitParamVarE)
@@ -180,7 +181,7 @@ env qe = do
         lam = lamE [varP varName | varName <- varNames] (return e'')
 
         args =
-            [ [e| val $(labelE label) |] | (label, _) <- colVarNames ]
+            [ [e| fmap getField $ findField $(labelE label) |] | (label, _) <- colVarNames ]
             ++
             [return bindExp | (_, bindExp) <- binds]
 

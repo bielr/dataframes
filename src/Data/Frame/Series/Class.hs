@@ -6,7 +6,7 @@ import GHC.TypeLits (KnownSymbol)
 
 import Control.Lens
 
-import Data.Vector.Generic as VG
+import Data.Vector.Generic qualified as VG
 
 import Data.Frame.Kind
 import Data.Frame.Field
@@ -39,6 +39,15 @@ class IsSeries series where
         => series col
         -> v (FieldType col)
     seriesToVector = copyIndexer . indexSeries
+
+
+seriesLength ::
+    ( IsSeries series
+    , CompatibleDataType series (FieldType col)
+    )
+    => series col
+    -> Int
+seriesLength = length . indexSeries
 
 
 class IsSeries series => GenerateSeries series where

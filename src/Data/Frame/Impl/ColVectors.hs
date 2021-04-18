@@ -15,7 +15,6 @@ import Control.Lens hiding ((:>))
 import Control.Monad
 import Control.Monad.ST qualified as ST
 import Control.Rowwise
-import Data.Coerce
 import Data.Profunctor.Unsafe
 import Data.Type.Coercion
 import Data.Vector.Generic qualified as VG
@@ -29,49 +28,94 @@ import Data.Frame.Series.VectorSeries
 import Data.Frame.TypeIndex
 import Data.Indexer
 import Data.Heterogeneous.Class.HCoerce
+import Data.Heterogeneous.Class.HConv
 import Data.Heterogeneous.Class.HCreate
-import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.HFoldable
+--import Data.Heterogeneous.Class.HFunctor
+import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.HTraversable
 import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.Subseq
 import Data.Heterogeneous.Class.TupleView
 import Data.Heterogeneous.Constraints
-import Data.Heterogeneous.HSmallArray (HSmallArray)
 import Data.Heterogeneous.HTuple
 import Data.Heterogeneous.TypeLevel
 
 
-type Frame :: FrameK
-data Frame cols = Frame
+
+type Columns :: HTyConK FieldK -> SeriesK -> FrameK
+data Columns hf series cols = Columns
     { _nrow    :: !Int
-    , _columns :: !(HSmallArray VectorSeries cols)
+    , _columns :: !(hf series cols)
     }
 
-makeLenses ''Frame
+makeLenses ''Columns
 
 
-instance IsFrame Frame where
-    frameLength (Frame n _) = n
+instance IsSeries series => IsFrame (Columns hf series) where
+    frameLength (Columns n _) = n
 
-    type instance Column Frame = VectorSeries
+    type instance Column (Columns hf series) = series
 
     -- type Env :: FieldsK -> Type -> Type -> Type
     -- type role Env nominal nominal nominal representational
-    newtype Env Frame cols a = FrameEnv (Rowwise (Frame cols) a)
+    newtype Env (Columns hf series) cols a =
+        RowwiseEnv (Rowwise (Columns hf series cols) a)
         deriving newtype (Functor, Applicative)
 
-    withFrame f = FrameEnv (withCtx f)
-    getRowIndex = FrameEnv rowid
+    withFrame f = RowwiseEnv (withCtx f)
+    getRowIndex = RowwiseEnv rowid
 
-    runEnv df@(Frame n _) (FrameEnv rww) = Indexer n $! runRowwise rww df
-
-
-instance (CompatibleField VectorSeries col, HGetI HSmallArray col cols i) => HasColumn Frame col cols i
+    runEnv df@(Columns n _) (RowwiseEnv rww) = Indexer n $! runRowwise rww df
 
 
-instance Columnar Frame HSmallArray cols where
-    toCols (Frame _ cols) = cols
+runEnvColumn :: forall col cols df.
+    ( IsFrame df
+    , GenerateSeries (Column df)
+    , CompatibleDataType (Column df) (FieldType col)
+    )
+    => df cols
+    -> Env df cols (FieldType col)
+    -> Column df col
+runEnvColumn df = generateSeries . runEnv df
+
+
+instance
+    ( IsSeries series
+    , CompatibleField series col
+    , HGetI hf col cols i
+    )
+    => HasColumn (Columns hf series) col cols i
+
+
+instance (IsSeries series, hf ~ hg) => ColumnarFrame (Columns hf series) hg cols where
+    toCols (Columns _ cols) = cols
+
+
+instance (IsSeries series, HSingleton hf) => FromSingleColumn (Columns hf series) where
+    fromSingleCol series = Columns (seriesLength series) (hsingleton # series)
+
+
+instance (IsSeries series, HMonoid hf) => ConcatCols (Columns hf series) where
+    unsafeConcatCols (Columns n cols) (Columns m cols') =
+        Columns (checkLengths n m) (cols `happend` cols')
+
+
+instance (GenerateSeries series, HMonoid hf) => AppendCol (Columns hf series) where
+    appendCol (env :: Env df cols (Field col)) df@(Columns n cols) =
+        Columns n (cols `hsnoc` runEnvColumn @col df (getField <$> env))
+
+    prependCol (env :: Env df cols (Field col)) df@(Columns n cols) =
+        Columns n (runEnvColumn @col df (getField <$> env) `hcons` cols)
+
+
+instance
+    ( HCreate hg cols
+    , HTraversable hg cols
+    , HConv hg hf cols
+    )
+    => GenerateFrame (Columns hf VectorSeries) hg cols where
+    generateFrame gen = over columns hconv (generateVecCols gen)
 
 
 checkLengths :: HasCallStack => Int -> Int -> Int
@@ -84,148 +128,111 @@ checkLengths !n !m
 
 -- this ensures that the user does not modify the length of the frame
 -- throws error if not preserved!
-frameOfLength :: forall cols cols'.
+frameOfLength ::
     HasCallStack
     => Int
     -> Iso
-        (HSmallArray VectorSeries cols) (HSmallArray VectorSeries cols')
-        (Frame cols)                    (Frame cols')
+        (hf series cols)             (hf' series' cols')
+        (Columns hf series cols)     (Columns hf' series' cols')
 frameOfLength n =
-    iso (Frame n) deframe
+    iso (Columns n) deframe
   where
-    deframe :: Frame cols' -> HSmallArray VectorSeries cols'
-    deframe (Frame m cs) = checkLengths n m `seq` cs
+    -- deframe :: Frame cols' -> HSmallArray VectorSeries cols'
+    deframe (Columns m cs) = checkLengths n m `seq` cs
 {-# inline frameOfLength #-}
 
 
-fromColsMaybe :: forall cols.
-    ( KnownLength cols
-    , CompatibleFields Frame cols
+fromColsMaybe :: forall cols hf series.
+    ( IsSeries series
+    , HFoldable hf cols
+    , All (CompatibleField series) cols
     )
-    => HSmallArray VectorSeries cols
-    -> Maybe (Frame cols)
+    => hf series cols
+    -> Maybe (Columns hf series cols)
 fromColsMaybe cols =
-    let lengths :: HSmallArray VectorSeries cols -> [Int]
+    let lengths :: hf series cols -> [Int]
         lengths = hitoListWith $
-            constrained @(CompatibleField VectorSeries) @cols $
-                view (from _VectorSeries . to VG.length)
+            constrained @(CompatibleField series) @cols $
+                length . indexSeries
     in
         case lengths cols of
-            []     -> Just (Frame 0 cols)
+            []     -> Just (Columns 0 cols)
             (l:ls)
-              | all (==l) ls -> Just (Frame l cols)
+              | all (==l) ls -> Just (Columns l cols)
               | otherwise    -> Nothing
 
 
-fromCols_ :: forall cols series_cols t.
-    ( KnownLength cols
-    , CompatibleFields Frame cols
+fromCols_ :: forall cols hf series t.
+    ( IsSeries series
+    , HFoldable hf cols
 
-    , TupleView HSmallArray cols
+    , KnownLength cols
+    , All (CompatibleField series) cols
+
+    , TupleView hf cols
     , HCoerce HTuple cols
-    , IsTupleOf series_cols t
-    , Mapped VectorSeries cols series_cols
+    , IsTupleOfF series cols t
     )
     => t
-    -> Maybe (Frame cols)
+    -> Maybe (Columns hf series cols)
 fromCols_ = fromColsMaybe . fromHTuple .# coerceWith (hIdLCo . hconOutCo . htupleCo)
 
 
-
-newCol ::
-    CompatibleField VectorSeries col
-    => Frame cols
-    -> Env Frame cols (Field col)
-    -> VectorSeries col
-newCol df env = generateSeries (runEnv df (coerce env))
-
-
-prependCol ::
-    CompatibleField VectorSeries col
-    => Env Frame cols (Field col)
-    -> Frame cols
-    -> Frame (col ': cols)
-prependCol env df@(Frame n cols) =
-    Frame n (newCol df env `hcons` cols)
-
-
-appendCol ::
-    CompatibleField VectorSeries col
-    => Env Frame cols (Field col)
-    -> Frame cols
-    -> Frame (cols ++ '[col])
-appendCol env df@(Frame n cols) =
-    Frame n (cols `hsnoc` newCol df env)
-
-
-restricting :: forall is cols1' cols2' cols1 cols2 proxy.
+restricting :: forall is cols1' cols2' cols1 cols2 hf series proxy.
     ( IsFieldsProxy cols1 is proxy
-    , HSubseqI HSmallArray cols1' cols2' cols1 cols2 is
+    , HSubseqI hf cols1' cols2' cols1 cols2 is
     )
     => proxy
-    -> Lens (Frame cols1) (Frame cols2) (Frame cols1') (Frame cols2')
-restricting _ f df@(Frame n _) =
+    -> Lens
+        (Columns hf series cols1)  (Columns hf series cols2)
+        (Columns hf series cols1') (Columns hf series cols2')
+restricting _ f df@(Columns n _) =
     (columns . hsubseqI @_ @cols1' @cols2' @cols1 @cols2 @is . frameOfLength n) f df
 
 
 
-type FieldWriter :: Type -> FieldK -> Type
-newtype FieldWriter s col = FieldWriter
-    { writeField :: Int -> Field col -> ST.ST s ()
-    }
+-- type FieldWriter :: Type -> FieldK -> Type
+-- newtype FieldWriter s col = FieldWriter
+--     { writeField :: Int -> Field col -> ST.ST s ()
+--     }
 
 
-generateCols :: forall cols' cols t.
-    ( KnownLength cols'
-
-    , HCoerce HTuple cols'
-    , HTraversable HTuple cols'
-    , TupleView HSmallArray cols'
-
-    , IsTupleOf (TupleMembers t) t
-    , Mapped Field cols' (TupleMembers t)
-
-    , CompatibleFields Frame cols'
+generateVecCols :: forall cols hf.
+    ( HCreate hf cols
+    , HTraversable hf cols
+    , All (CompatibleField VectorSeries) cols
     )
-    => Env Frame cols t
-    -> Frame cols
-    -> Frame cols'
-generateCols (FrameEnv rww) df@(Frame n _) = ST.runST do
-    let tupleGen :: Int -> t
-        !tupleGen = runRowwise rww df
-
-        fieldCo :: t :~>: HTuple Field cols'
-        !fieldCo = hIdLCo . hconOutCo . htupleCo
-
-        fieldsGen :: Int -> HTuple Field cols'
-        !fieldsGen = gcoerceWith fieldCo (coerce tupleGen)
-
+    => Indexer (hf Field cols)
+    -> Columns hf VectorSeries cols
+generateVecCols (Indexer n fieldsGen) = ST.runST do
     mcols' <- initMVs
 
-    let writers = toWriters mcols'
+    --let writers = toWriters mcols'
 
     forM_ [0..n-1] \i ->
-        htraverse2_ (\w a -> writeField w i a)
-            writers
+        hitraverse2_
+            (constrained @(CompatibleField VectorSeries) @cols \(MVectorSeries mv) (Field a) ->
+                VGM.unsafeWrite mv i a)
+            mcols'
             (fieldsGen i)
 
-    cols' <- freezeCols mcols'
+    cols <- freezeCols mcols'
 
-    return (Frame n cols')
+    return (Columns n cols)
   where
-    initMVs :: ST.ST s (HSmallArray (MVectorSeries s) cols')
+    initMVs :: ST.ST s (hf (MVectorSeries s) cols)
     initMVs =
         hcreateA $
-            constrained @(CompatibleField VectorSeries) @cols' $
+            constrained @(CompatibleField VectorSeries) @cols $
                 MVectorSeries <$> VGM.unsafeNew n
 
-    freezeCols :: HSmallArray (MVectorSeries s) cols' -> ST.ST s (HSmallArray VectorSeries cols')
+    freezeCols :: hf (MVectorSeries s) cols -> ST.ST s (hf VectorSeries cols)
     freezeCols =
         hitraverse $
-            constrained @(CompatibleField VectorSeries) @cols' \(MVectorSeries mv) ->
+            constrained @(CompatibleField VectorSeries) @cols \(MVectorSeries mv) ->
                 VectorSeries <$> VG.unsafeFreeze mv
 
-    toWriters :: HSmallArray (MVectorSeries s) cols' -> HTuple (FieldWriter s) cols'
-    toWriters =
-        htupleWithC @_ @_ @(CompatibleField VectorSeries) \(MVectorSeries mv) ->
-            FieldWriter (\i a -> VGM.unsafeWrite mv i (getField a))
+    -- toWriters :: hf (MVectorSeries s) cols -> hf (FieldWriter s) cols
+    -- toWriters =
+    --     hmapC @(CompatibleField VectorSeries) \(MVectorSeries mv) ->
+    --         FieldWriter (\i a -> VGM.unsafeWrite mv i (getField a))

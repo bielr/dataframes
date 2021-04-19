@@ -16,19 +16,12 @@ import Control.Lens
 import GHC.Tuple
 import Data.Text (Text)
 
-import Data.Heterogeneous.HList
-import Data.Heterogeneous.TypeLevel
 import Data.Frame.DataTypes.VectorMode
-import Data.Frame.Class qualified as Cs
-import Data.Frame.Impl.ColVectors qualified as Cs
 import Data.Frame.Display
 import Data.Frame.Kind
 import Data.Frame.Pipe qualified as Pipe
 import Data.Frame.Sugar
 import Data.Frame.TH.Eval
-import Data.Frame.TypeIndex
-import Data.Indexer
-import Control.Rowwise qualified as Rw
 
 
 
@@ -38,6 +31,7 @@ import Control.Rowwise qualified as Rw
 --     c <- col #c
 --     pure (fromIntegral a + c)
 
+
 data EvilShow = EvilShow
 type instance VectorModeOf EvilShow = 'Boxed
 
@@ -45,8 +39,8 @@ instance Show EvilShow where
     show EvilShow = "oo\t\rps\nas\0df"
 
 
-myDF :: Frame _
-myDF = frameFromCols
+testFromCols :: Frame _
+testFromCols = frameFromCols
     ( #a =.. [1, 2, 3, 44444444 :: Int]
     , #b =.. ["a", "b", "c", "ddddddddddddddddddddddddddddddd" :: Text]
     , #c =.. [[0], [0..1], [0..2], [0..3] :: [Int]]
@@ -54,69 +48,76 @@ myDF = frameFromCols
     )
 
 
-test2 :: Env Frame '["a":>Int, "b":>Char, "c":>Double] Double
-test2 = [_row| fromIntegral ?a + ?c |]
+testEval :: Eval Frame '["a":>Int, "b":>Char, "c":>Double] Double
+testEval = [_eval| fromIntegral ?a + ?c |]
 
 
--- testAppend ::
---     Frame '["a":>Int, "b":>Char, "c":>Double]
---     -> Frame _
--- testAppend = Pipe.do
---     appendCol [_row| #d =. fromIntegral ?a + ?c |]
---
---     appendCol [_row| #e =. show ?d |]
---
---     restricting (#a, #c) %~ Pipe.do
---         transmute [_row| (#x =. ?c+1 , #y =. ?a-1) |]
---
---
--- testPrint :: IO ()
--- testPrint = do
---     let Just df = frameFromCols (Solo (#b =.. [0..10 :: Int]))
---
---     printFrameWith defaultShowOptions { cellMaxWidth = 50 } $ df & Pipe.do
---         appendCol $(env [| #c =. show ?b |])
---
---         transmute $(env [|
---             let x = ?b + read ?c
---             in (#x =. x, #sqrt_x =. sqrt (fromIntegral x :: Float))
---           |])
---
---         appendCol $(env [| #sqrt_x_sq =. ?sqrt_x**2 |])
---
---         appendCol $(env [| #diff =. fromIntegral ?x - ?sqrt_x_sq |])
+testAppend ::
+    Frame '["a":>Int, "b":>Char, "c":>Double]
+    -> Frame _
+testAppend = Pipe.do
+    appendCol [_eval| #d =. fromIntegral ?a + ?c |]
+
+    appendCol [_eval| #e =. (? fmap show (val #d)) |]
+
+    -- restricting (#a, #c) %~ Pipe.do
+    --     transmute [_eval| (#x =. ?c+1 , #y =. ?a-1) |]
 
 
-testPrintWithPlugin :: Frame '["b":>Int] -> IO ()
-testPrintWithPlugin df =
-    df & transmute' [_row|
-            let c = show ?b
-                x = ?b + read c
-                sqrt_x = sqrt (fromIntegral x :: Float)
-                sqrt_x_sq = sqrt_x**2
-                diff = fromIntegral x - sqrt_x_sq
-            in
-                (#c =. c, #x =. x, #sqrt_x =. sqrt_x, #sqrt_x_sq =. sqrt_x_sq, #diff =. diff)
-          |]
+testInference :: IO ()
+testInference =
+    frameFromCols (Solo (#b =.. [0..10 :: Int]))
+        & appendCol $(eval [| #c =. show ?b |])
 
-       & printFrameWith defaultShowOptions { cellMaxWidth = 50 }
+        & transmute' $(eval [|
+            let x = ?b + read ?c
+            in (#x =. x, #sqrt_x =. sqrt (fromIntegral x :: Float))
+          |])
 
-     -- df & appendCol [_row| #c =. show ?b |]
+        & appendCol $(eval [| #sqrt_x_sq =. ?sqrt_x**2 |])
 
-     --    & transmute' [_row|
-     --        let x = ?b + read ?c
-     --        in (#x =. x, #sqrt_x =. sqrt (fromIntegral x :: Float))
-     --      |]
+        & appendCol $(eval [| #diff =. fromIntegral ?x - ?sqrt_x_sq |])
 
-     --    & appendCol [_row| #sqrt_x_sq =. ?sqrt_x**2 |]
+        & printFrameWith defaultShowOptions { cellMaxWidth = 50 }
+{-# noinline testInference #-}
 
-     --    & appendCol [_row| #diff =. fromIntegral ?x - ?sqrt_x_sq |]
 
-     --    & printFrameWith defaultShowOptions { cellMaxWidth = 50 }
+testSingleTransmute :: Frame '["b":>Int] -> IO ()
+testSingleTransmute df = df
+    & transmute' [_eval|
+        let c = show ?b
+            x = ?b + read c
+            sqrt_x = sqrt (fromIntegral x :: Float)
+            sqrt_x_sq = sqrt_x**2
+            diff = fromIntegral x - sqrt_x_sq
+        in
+            (#c =. c, #x =. x, #sqrt_x =. sqrt_x, #sqrt_x_sq =. sqrt_x_sq, #diff =. diff)
+        |]
 
-{-# noinline testPrintWithPlugin #-}
+    & printFrameWith defaultShowOptions { cellMaxWidth = 50 }
+
+{-# noinline testSingleTransmute #-}
+
+
+testTransmuteAppend :: Frame '["b":>Int] -> IO ()
+testTransmuteAppend df = df
+    & appendCol [_eval| #c =. show ?b |]
+
+    & transmute' [_eval|
+        let x = ?b + read ?c
+        in (#x =. x, #sqrt_x =. sqrt (fromIntegral x :: Float))
+        |]
+
+    & appendCol [_eval| #sqrt_x_sq =. ?sqrt_x**2 |]
+
+    & appendCol [_eval| #diff =. fromIntegral ?x - ?sqrt_x_sq |]
+
+    & printFrameWith defaultShowOptions { cellMaxWidth = 50 }
+
+{-# noinline testTransmuteAppend #-}
 
 
 main :: IO ()
-main = myDF `seq` testPrintWithPlugin $
-    frameFromCols (Solo (#b =.. [0..10 :: Int]))
+main = testFromCols `seq` testTransmuteAppend $
+    generateFrame $ Indexer 10 \i ->
+        HTuple (Solo (#b =. i))

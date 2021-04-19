@@ -21,6 +21,7 @@ import GHC.TypeLits       as Exports (Symbol, TypeError, ErrorMessage(..))
 import Data.Kind          as Exports (Constraint, Type)
 import Data.Type.Bool     as Exports
 import Data.Type.Equality as Exports (type (==))
+import Fcf.Core
 
 import Data.Heterogeneous.TypeLevel
 
@@ -57,8 +58,8 @@ type instance Eval (FieldTypeExp col) = FieldType col
 type ZippedFields :: [Symbol] -> [Type] -> [FieldK] -> Constraint
 type ZippedFields ss as cols =
     ( ZippedWith (:>) ss as cols
-    , ss ~ Eval (FMap FieldNameExp cols)
-    , as ~ Eval (FMap FieldTypeExp cols)
+    , ss ~ FMap FieldNameExp @@ cols
+    , as ~ FMap FieldTypeExp @@ cols
     )
 
 type RecK = HTyConK FieldK

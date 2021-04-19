@@ -3,7 +3,6 @@
 {-# language TemplateHaskellQuotes #-}
 module Data.Frame.TH.Eval
     ( (?)
-    , env
     , eval
     ) where
 
@@ -14,17 +13,11 @@ import Data.IORef
 import Data.HashTable.IO qualified as HT
 import Data.Ratio (Ratio)
 import Data.Word (Word8)
-import Language.Haskell.Exts.Extension        qualified as Exts
-import Language.Haskell.Exts.Parser           qualified as Exts
-import Language.Haskell.Meta.Parse            qualified as Meta
-import Language.Haskell.Meta.Syntax.Translate qualified as Meta
 import Language.Haskell.TH.Lib
-import Language.Haskell.TH.Quote
 import Language.Haskell.TH.Syntax
-import Text.Read (readMaybe)
 import Type.Errors (DelayError, ErrorMessage(..))
 
-import Data.Frame.Class (Env, findField)
+import Data.Frame.Class (Eval, findField)
 import Data.Frame.Field (getField)
 
 import Control.Lens (Prism', Traversal', _Just, prism, has, forMOf)
@@ -141,7 +134,7 @@ replaceImplicitParams e = do
     return (e', colVarNames)
 
 
-(?) :: DelayError ('Text "Data.Frame.TH.Eval.? used outside of $(env)") => xxx -> Env df cols a -> yyy
+(?) :: DelayError ('Text "Data.Frame.TH.Eval.? used outside of $(eval ...)") => xxx -> Eval df cols a -> yyy
 (?) = undefined
 
 
@@ -168,8 +161,8 @@ replaceSectionR e = do
                 -> Left outer)
 
 
-env :: Q Exp -> Q Exp
-env qe = do
+eval :: Q Exp -> Q Exp
+eval qe = do
     e <- qe
 
     (e', colVarNames) <- replaceImplicitParams e
@@ -186,40 +179,3 @@ env qe = do
             [return bindExp | (_, bindExp) <- binds]
 
     foldl' (\f fld -> [| $f <*> $fld |]) [|pure $lam|] args
-
-
-
-getParseModeFromContext :: Q Exts.ParseMode
-getParseModeFromContext = do
-    exts <- map convExt <$> extsEnabled
-
-    return Exts.defaultParseMode
-        { Exts.parseFilename = "Frame environment expression"
-        , Exts.baseLanguage = Exts.HaskellAllDisabled
-        , Exts.extensions = exts
-        -- , fixities = x
-        }
-  where
-    reinterpretExt :: Extension -> Either String Exts.KnownExtension
-    reinterpretExt e =
-        let s = show e
-        in maybe (Left s) Right (readMaybe s)
-
-    convExt :: Extension -> Exts.Extension
-    convExt e =
-        case reinterpretExt e of
-            Right k -> Exts.EnableExtension k
-            Left u -> Exts.UnknownExtension u
-
-
-eval :: QuasiQuoter
-eval = QuasiQuoter
-    { quoteExp = \s -> do
-        mode <- getParseModeFromContext
-        case Meta.parseResultToEither (Exts.parseExpWithMode mode s) of
-            Right e  -> env (return (Meta.toExp e))
-            Left err -> fail err
-    , quotePat = \_ -> fail "pattern quasiquotes are not supported"
-    , quoteType = \_ -> fail "type quasiquotes are not supported"
-    , quoteDec = \_ -> fail "declaration quasiquotes are not supported"
-    }

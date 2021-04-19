@@ -246,20 +246,17 @@ instance AllF Hashable f as => Hashable (HSmallArray f as) where
                 _ -> constrained @(ComposeC Hashable f) @as (h `hashWithSalt` a) i
 
 
-instance
-    ( KnownPeano i
-    , (as !! i) ~ a
-    )
-    => HGetI HSmallArray a as i where
-
+instance KnownPeano i => HGetI HSmallArray as i where
     hgetI harrf = unsafeIndex harrf (getSNat @i)
     {-# inline hgetI #-}
 
 
 instance
     ( KnownPeano i
-    , HGetI HSmallArray a as i
-    , HGetI HSmallArray b bs i
+    , HGetI HSmallArray as i
+    , a ~ as !! i
+    , HGetI HSmallArray bs i
+    , b ~ bs !! i
     , ReplaceSubseqI '[a] '[b] as bs '[i]
     )
     => HSetI HSmallArray a b as bs i where

@@ -49,14 +49,14 @@ parsedPlugin _ _ =
     processHsExpr = \case
         HsSpliceE NoExtField splice
             | HsQuasiQuote NoExtField splicePoint quoter srcSpan contents <- splice
-            , "_row" <- occNameString (occName quoter)
+            , "_eval" <- occNameString (occName quoter)
             -> do
                 row_e <- parseStringAsLHsExpr srcSpan contents
 
-                let env_name = mkQual varName (fsLit "Data.Frame.TH.Eval", fsLit "env")
-                    env_e = HsVar NoExtField (noLoc env_name)
+                let eval_name = mkQual varName (fsLit "Data.Frame.TH.Eval", fsLit "eval")
+                    eval_e = HsVar NoExtField (noLoc eval_name)
                     br_e = HsBracket NoExtField (ExpBr NoExtField row_e)
-                    splice_e = HsApp NoExtField (noLoc env_e) (noLoc br_e)
+                    splice_e = HsApp NoExtField (noLoc eval_e) (noLoc br_e)
 
                 return $
                     HsSpliceE NoExtField $

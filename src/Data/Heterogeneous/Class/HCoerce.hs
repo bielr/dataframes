@@ -21,7 +21,7 @@ type (:~>:) = Coercion
 
 
 type NatCoercion :: forall {k1} {k2}. (k1 -> Type) -> (k2 -> Type) -> (k1 -> Exp k2) -> Type
-type NatCoercion f g h = forall a. f a :~>: g (Eval (h a))
+type NatCoercion f g h = forall a. f a :~>: g (h @@ a)
 
 
 class HCoerce (hf :: HPolyTyConK) (as :: [k]) where
@@ -32,7 +32,7 @@ class HCoerce (hf :: HPolyTyConK) (as :: [k]) where
     hliftExpCo :: forall {k'} (f :: k -> Type) (g :: k' -> Type) (h :: k -> Exp k').
         Proxy# h
         -> NatCoercion f g h
-        -> Coercion (hf f as) (hf g (Eval (FMap h as)))
+        -> Coercion (hf f as) (hf g (FMap h @@ as))
 
 
 hconInCo :: forall (hf :: HPolyTyConK) as fas f g.
@@ -93,7 +93,7 @@ hcoerceWith co = hgcoerceWith @hf @as co coerce
 hgcoerceExpWith :: forall (hf :: HPolyTyConK) as h r f g.
     HCoerce hf as
     => NatCoercion f g h
-    -> (Coercible (hf f as) (hf g (Eval (FMap h as))) => r)
+    -> (Coercible (hf f as) (hf g (FMap h @@ as)) => r)
     -> r
 hgcoerceExpWith co = gcoerceWith (hliftExpCo (proxy# @h) co)
 {-# inline hgcoerceExpWith #-}
@@ -103,6 +103,6 @@ hcoerceExpWith :: forall h f g (hf :: HPolyTyConK) as.
     HCoerce hf as
     => NatCoercion f g h
     -> hf f as
-    -> hf g (Eval (FMap h as))
+    -> hf g (FMap h @@ as)
 hcoerceExpWith co = hgcoerceExpWith @hf @as @h co coerce
 {-# inline hcoerceExpWith #-}

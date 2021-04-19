@@ -13,7 +13,7 @@ module Data.Frame.Sugar
     , C.Columns
     , HList
     , HSmallArray
-    , HTuple
+    , HTuple(..)
     , VectorSeries
 
     , (=.)
@@ -21,13 +21,14 @@ module Data.Frame.Sugar
     , fld
     , val
 
-    , Env
+    , Eval
     , C.frameLength
     , C.withFrame
     , C.getRowIndex
 
     , Frame
     , frameFromCols
+    , C.generateFrame
 
     , C.appendCol
     , C.prependCol
@@ -43,7 +44,7 @@ import Data.Maybe (fromMaybe)
 import Data.Profunctor.Unsafe
 import Data.Type.Coercion
 
-import Data.Frame.Class (Env)
+import Data.Frame.Class (Eval)
 import Data.Frame.Class qualified as C
 import Data.Frame.Field as Exports
 import Data.Frame.Kind as Exports
@@ -59,6 +60,8 @@ import Data.Heterogeneous.HList
 import Data.Heterogeneous.HSmallArray
 import Data.Heterogeneous.HTuple
 import Data.Heterogeneous.TypeLevel
+
+import Data.Indexer as Exports
 
 
 type Frame = C.Columns HSmallArray VectorSeries
@@ -82,18 +85,23 @@ _ =.. fa = fa
 
 fld :: forall col cols i df proxy.
     ( IsFieldsProxy cols i proxy
-    , C.HasColumn df col cols i
+    , C.HasColumnAt df cols i
+    , CompatibleField (C.Column df) col
+    , col ~ cols !! i
     )
     => proxy
-    -> Env df cols (Field col)
+    -> Eval df cols (Field col)
 fld = C.findField
+
 
 val :: forall col cols i df proxy.
     ( IsFieldsProxy cols i proxy
-    , C.HasColumn df col cols i
+    , C.HasColumnAt df cols i
+    , CompatibleField (C.Column df) col
+    , col ~ cols !! i
     )
     => proxy
-    -> Env df cols (FieldType col)
+    -> Eval df cols (FieldType col)
 val = fmap getField #. fld
 
 
@@ -134,11 +142,11 @@ transmute :: forall cols cols' t df df'.
     , C.GenerateFrame df HTuple cols'
     , C.CompatibleFields df cols'
     )
-    => Env df' cols t
+    => Eval df' cols t
     -> df' cols
     -> df cols'
-transmute env df =
-    C.generateFrame (C.runEnv df (C.coerceHTupleEnv env))
+transmute et df =
+    C.generateFrame (C.runEval df (C.coerceHTupleEval et))
 
 
 transmute' :: forall cols cols' t df.
@@ -147,7 +155,7 @@ transmute' :: forall cols cols' t df.
     , C.GenerateFrame df HTuple cols'
     , C.CompatibleFields df cols'
     )
-    => Env df cols t
+    => Eval df cols t
     -> df cols
     -> df cols'
 transmute' = transmute
@@ -157,7 +165,7 @@ transmute2 :: forall cols cols' df.
     ( C.GenerateFrame df HList cols'
     , C.CompatibleFields df cols'
     )
-    => Env df cols (HList Field cols')
+    => Eval df cols (HList Field cols')
     -> df cols
     -> df cols'
-transmute2 env df = C.generateFrame (C.runEnv df env)
+transmute2 ecols' df = C.generateFrame (C.runEval df ecols')

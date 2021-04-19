@@ -43,7 +43,7 @@ import Data.Heterogeneous.TypeLevel
 
 
 
-type Columns :: HTyConK FieldK -> SeriesK -> FrameK
+type Columns :: RecK -> SeriesK -> FrameK
 data Columns hf series cols = Columns
     { _nrow    :: !Int
     , _columns :: !(hf series cols)
@@ -57,16 +57,16 @@ instance IsSeries series => IsFrame (Columns hf series) where
 
     type instance Column (Columns hf series) = series
 
-    -- type Env :: FieldsK -> Type -> Type -> Type
-    -- type role Env nominal nominal nominal representational
-    newtype Env (Columns hf series) cols a =
-        RowwiseEnv (Rowwise (Columns hf series cols) a)
+    -- type Eval :: FieldsK -> Type -> Type -> Type
+    -- type role Eval nominal nominal nominal representational
+    newtype Eval (Columns hf series) cols a =
+        RowwiseEval (Rowwise (Columns hf series cols) a)
         deriving newtype (Functor, Applicative)
 
-    withFrame f = RowwiseEnv (withCtx f)
-    getRowIndex = RowwiseEnv rowid
+    withFrame f = RowwiseEval (withCtx f)
+    getRowIndex = RowwiseEval rowid
 
-    runEnv df@(Columns n _) (RowwiseEnv rww) = Indexer n $! runRowwise rww df
+    runEval df@(Columns n _) (RowwiseEval rww) = Indexer n $! runRowwise rww df
 
 
 runEnvColumn :: forall col cols df.
@@ -75,20 +75,21 @@ runEnvColumn :: forall col cols df.
     , CompatibleDataType (Column df) (FieldType col)
     )
     => df cols
-    -> Env df cols (FieldType col)
+    -> Eval df cols (FieldType col)
     -> Column df col
-runEnvColumn df = generateSeries . runEnv df
+runEnvColumn df = generateSeries . runEval df
 
 
 instance
     ( IsSeries series
-    , CompatibleField series col
-    , HGetI hf col cols i
+    , CompatibleField series (cols !! i)
+    , HGetI hf cols i
     )
-    => HasColumn (Columns hf series) col cols i
+    => HasColumnAt (Columns hf series) cols i
 
 
-instance (IsSeries series, hf ~ hg) => ColumnarFrame (Columns hf series) hg cols where
+instance IsSeries series => ColumnarFrame (Columns hf series) where
+    type ColumnarHRep (Columns hf series) = hf
     toCols (Columns _ cols) = cols
 
 
@@ -102,10 +103,10 @@ instance (IsSeries series, HMonoid hf) => ConcatCols (Columns hf series) where
 
 
 instance (GenerateSeries series, HMonoid hf) => AppendCol (Columns hf series) where
-    appendCol (env :: Env df cols (Field col)) df@(Columns n cols) =
+    appendCol (env :: Eval df cols (Field col)) df@(Columns n cols) =
         Columns n (cols `hsnoc` runEnvColumn @col df (getField <$> env))
 
-    prependCol (env :: Env df cols (Field col)) df@(Columns n cols) =
+    prependCol (env :: Eval df cols (Field col)) df@(Columns n cols) =
         Columns n (runEnvColumn @col df (getField <$> env) `hcons` cols)
 
 

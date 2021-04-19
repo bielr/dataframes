@@ -32,8 +32,8 @@ instance TrueC a
 
 type ComposeExpC :: forall k j. (j -> Constraint) -> (k -> Exp j) -> k -> Constraint
 
-class c (Eval (f a)) => ComposeExpC c f a
-instance c (Eval (f a)) => ComposeExpC c f a
+class c (f @@ a) => ComposeExpC c f a
+instance c (f @@ a) => ComposeExpC c f a
 
 
 type ComposeC :: forall k j. (j -> Constraint) -> (k -> j) -> k -> Constraint

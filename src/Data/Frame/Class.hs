@@ -36,10 +36,10 @@ type IsFrame :: FrameK -> Constraint
 class
     -- Columns should be some kind of series
     ( IsSeries (Column df)
-    -- Env must be an Applicative functor
-    , forall cols. Applicative (Env df cols)
-    -- Env df cols must have a representational argument
-    , forall cols a b. Coercible a b => Coercible (Env df cols a) (Env df cols b)
+    -- Eval must be an Applicative functor
+    , forall cols. Applicative (Eval df cols)
+    -- Eval df cols must have a representational argument
+    , forall cols a b. Coercible a b => Coercible (Eval df cols a) (Eval df cols b)
     )
     => IsFrame df where
 
@@ -47,74 +47,72 @@ class
 
     type Column df :: FieldK -> Type
 
-    data Env df :: [FieldK] -> Type -> Type
+    data Eval df :: [FieldK] -> Type -> Type
 
-    withFrame :: (df cols -> r) -> Env df cols r
-    getRowIndex :: Env df cols Int
+    withFrame :: (df cols -> r) -> Eval df cols r
+    getRowIndex :: Eval df cols Int
 
-    runEnv :: df cols -> Env df cols a -> Indexer a
-
-
-frameEnvCo :: IsFrame df => (a :~>: b) -> (Env df cols a :~>: Env df cols b)
-frameEnvCo Coercion = Coercion
+    runEval :: df cols -> Eval df cols a -> Indexer a
 
 
-htupleEnvCo :: forall t f df cols cols'.
+frameEvalCo :: IsFrame df => (a :~>: b) -> (Eval df cols a :~>: Eval df cols b)
+frameEvalCo Coercion = Coercion
+
+
+htupleEvalCo :: forall t f df cols cols'.
     ( IsFrame df
     , HCoerce HTuple cols'
     , IsTupleOfF f cols' t
     )
-    => Env df cols t :~>: Env df cols (HTuple f cols')
-htupleEnvCo =
-    frameEnvCo (hIdLCo . hconOutCo . htupleCo)
+    => Eval df cols t :~>: Eval df cols (HTuple f cols')
+htupleEvalCo = frameEvalCo (hIdLCo . hconOutCo . htupleCo)
 
 
-coerceHTupleEnv :: forall f cols' cols t df.
+coerceHTupleEval :: forall f cols' cols t df.
     ( IsFrame df
     , HCoerce HTuple cols'
     , IsTupleOfF f cols' t
     )
-    => Env df cols t
-    -> Env df cols (HTuple f cols')
-coerceHTupleEnv = coerceWith htupleEnvCo
+    => Eval df cols t
+    -> Eval df cols (HTuple f cols')
+coerceHTupleEval = coerceWith htupleEvalCo
 
 
-class
-    ( IsFrame df
-    , (cols !! i) ~ col
-    )
-    => HasColumn df col cols i where
-
-    findColumn :: IsFieldsProxy cols i proxy => proxy -> df cols -> Column df col
-
-    findField :: IsFieldsProxy cols i proxy => proxy -> Env df cols (Field col)
-
+class IsFrame df => HasColumnAt df cols i where
+    findColumn :: IsFieldsProxy cols i proxy => proxy -> df cols -> Column df (cols !! i)
 
     default findColumn ::
         ( IsFieldsProxy cols i proxy
-        , ColumnarFrame df hf cols
-        , HGetI hf col cols i
+        , ColumnarFrame df
+        , HGetI (ColumnarHRep df) cols i
         )
         => proxy
         -> df cols
-        -> Column df col
-    findColumn _ = hgetI @_ @_ @_ @i . toCols
+        -> Column df (cols !! i)
+    findColumn _ = hgetI @_ @_ @i . toCols
 
 
-    default findField ::
-        ( IsFieldsProxy cols i proxy
-        , CompatibleField (Column df) col
-        )
-        => proxy
-        -> Env df cols (Field col)
-    findField proxy =
-        elemAt
-            <$> withFrame (fmap Field #. indexSeries . findColumn proxy)
-            <*> getRowIndex
+class HasColumnAt df cols (IndexOf col cols) => HasColumn df cols col
+instance HasColumnAt df cols (IndexOf col cols) => HasColumn df cols col
 
 
-class IsFrame df => ColumnarFrame df hf cols | df -> hf where
-    toCols :: df cols -> hf (Column df) cols
+findField ::
+    ( IsFieldsProxy cols i proxy
+    , HasColumnAt df cols i
+    , CompatibleField (Column df) (cols !! i)
+    )
+    => proxy
+    -> Eval df cols (Field (cols !! i))
+findField proxy =
+    elemAt
+        <$> withFrame (fmap Field #. indexSeries . findColumn proxy)
+        <*> getRowIndex
+
+
+class IsFrame df => ColumnarFrame df where
+    type ColumnarHRep df :: RecK
+
+    toCols :: df cols -> ColumnarHRep df (Column df) cols
 
 
 class IsFrame df => FromSingleColumn df where
@@ -124,22 +122,23 @@ class IsFrame df => FromSingleColumn df where
         -> df '[col]
 
 
-class IsFrame df => ConcatCols df where
+class ColumnarFrame df => ConcatCols df where
     unsafeConcatCols :: df cols -> df cols' -> df (cols ++ cols')
 
 
-class IsFrame df => AppendCol df where
+class ColumnarFrame df => AppendCol df where
     appendCol ::
         CompatibleDataType (Column df) (FieldType col)
-        => Env df cols (Field col)
+        => Eval df cols (Field col)
         -> df cols
         -> df (cols ++ '[col])
 
     prependCol ::
         CompatibleDataType (Column df) (FieldType col)
-        => Env df cols (Field col)
+        => Eval df cols (Field col)
         -> df cols
         -> df (col ': cols)
+
 
     default appendCol :: forall col cols.
         ( FromSingleColumn df
@@ -147,13 +146,13 @@ class IsFrame df => AppendCol df where
         , GenerateSeries (Column df)
         , CompatibleDataType (Column df) (FieldType col)
         )
-        => Env df cols (Field col)
+        => Eval df cols (Field col)
         -> df cols
         -> df (cols ++ '[col])
-    appendCol env df =
+    appendCol ecol df =
         unsafeConcatCols df (fromSingleCol newCol)
       where
-        newCol = generateSeries @_ @col $ fmap getField (runEnv df env)
+        newCol = generateSeries @_ @col $ fmap getField (runEval df ecol)
 
 
     default prependCol :: forall col cols.
@@ -162,23 +161,14 @@ class IsFrame df => AppendCol df where
         , GenerateSeries (Column df)
         , CompatibleDataType (Column df) (FieldType col)
         )
-        => Env df cols (Field col)
+        => Eval df cols (Field col)
         -> df cols
         -> df (col ': cols)
-    prependCol env df =
+    prependCol ecol df =
         unsafeConcatCols (fromSingleCol newCol) df
       where
-        newCol = generateSeries @_ @col $ fmap getField (runEnv df env)
+        newCol = generateSeries @_ @col $ fmap getField (runEval df ecol)
 
 
 class (IsFrame df, GenerateSeries (Column df)) => GenerateFrame df hf cols where
     generateFrame :: CompatibleFields df cols => Indexer (hf Field cols) -> df cols
-
-
--- record :: forall ss as cols.
---     ( cols ~ ZipWith (:>) ss as
---     , Coercible (TupleOf as) (HTuple Field cols)
---     )
---     => TupleOf as
---     -> HTuple Field cols
--- record = coerce

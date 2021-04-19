@@ -98,9 +98,8 @@ type IsSubseqWithError ss rs =
 type ReplaceSubseqI :: forall k. [k] -> [k] -> [k] -> [k] -> [Peano] -> Constraint
 
 class IsSubseqI ss rs is => ReplaceSubseqI ss ss' rs rs' is
-    | is rs -> ss
-    , is ss rs' -> rs
-    , is ss' rs -> rs'
+    | is ss  rs' -> rs
+    , is ss' rs  -> rs'
 
 
 -- trivial case

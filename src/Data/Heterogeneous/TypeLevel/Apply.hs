@@ -1,6 +1,6 @@
 {-# language UndecidableInstances #-}
 module Data.Heterogeneous.TypeLevel.Apply
-    ( Eval
+    ( type (@@)
     , Exp
     , Pure
     , Pure1
@@ -48,11 +48,11 @@ type instance Eval (UnApplyExp f y) = UnApply f y
 
 
 type Map :: (i -> j) -> [i] -> [j]
-type Map f xs = Eval (FMap (Pure1 f) xs)
+type Map f xs = FMap (Pure1 f) @@ xs
 
 
 type UnMap :: (i -> j) -> [j] -> [i]
-type UnMap f ys = Eval (FMap (UnApplyExp f) ys)
+type UnMap f ys = FMap (UnApplyExp f) @@ ys
 
 
 -- workaround because GHC can't understand that Map is injective for fixed i

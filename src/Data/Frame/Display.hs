@@ -358,15 +358,15 @@ defaultShowOptions = ShowOptions
     }
 
 
-showFrameWith :: forall cols df hf.
+showFrameWith :: forall cols df.
     ( AllE Show FieldTypeExp cols
     , AllE Typeable FieldTypeExp cols
     , CompatibleFields df cols
     , KnownLength cols
 
-    , ColumnarFrame df hf cols
-    , HFunctor hf cols
-    , HFoldable hf cols
+    , ColumnarFrame df
+    , HFunctor (ColumnarHRep df) cols
+    , HFoldable (ColumnarHRep df) cols
     )
     => ShowOptions
     -> df cols
@@ -381,30 +381,30 @@ showFrameWith opts df = df
     nl = Text.pack "\n"
 
 
-showFrame :: forall cols df hf.
+showFrame :: forall cols df.
     ( AllE Show FieldTypeExp cols
     , AllE Typeable FieldTypeExp cols
     , CompatibleFields df cols
     , KnownLength cols
 
-    , ColumnarFrame df hf cols
-    , HFunctor hf cols
-    , HFoldable hf cols
+    , ColumnarFrame df
+    , HFunctor (ColumnarHRep df) cols
+    , HFoldable (ColumnarHRep df) cols
     )
     => df cols
     -> Text
 showFrame = showFrameWith defaultShowOptions
 
 
-printFrameWith :: forall cols df hf.
+printFrameWith :: forall cols df.
     ( AllE Show FieldTypeExp cols
     , AllE Typeable FieldTypeExp cols
     , CompatibleFields df cols
     , KnownLength cols
 
-    , ColumnarFrame df hf cols
-    , HFunctor hf cols
-    , HFoldable hf cols
+    , ColumnarFrame df
+    , HFunctor (ColumnarHRep df) cols
+    , HFoldable (ColumnarHRep df) cols
     )
     => ShowOptions
     -> df cols
@@ -413,15 +413,15 @@ printFrameWith opts = Text.putStrLn . showFrameWith opts
 {-# noinline printFrameWith #-}
 
 
-printFrame :: forall cols df hf.
+printFrame :: forall cols df.
     ( AllE Show FieldTypeExp cols
     , AllE Typeable FieldTypeExp cols
     , CompatibleFields df cols
     , KnownLength cols
 
-    , ColumnarFrame df hf cols
-    , HFunctor hf cols
-    , HFoldable hf cols
+    , ColumnarFrame df
+    , HFunctor (ColumnarHRep df) cols
+    , HFoldable (ColumnarHRep df) cols
     )
     => df cols
     -> IO ()

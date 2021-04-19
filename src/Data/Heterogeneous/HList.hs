@@ -267,12 +267,12 @@ instance HTraversable HList as where
     {-# inline hitraverse2 #-}
 
 
-instance a ~ b => HGetI HList a (b ': as) 'Zero where
+instance HGetI HList (a ': as) 'Zero where
     hgetI (a :& _) = a
 
 
-instance HGetI HList a as i => HGetI HList a (b ': as) ('Succ i) where
-    hgetI (_ :& as) = hgetI @HList @a @as @i as
+instance HGetI HList as i => HGetI HList (a ': as) ('Succ i) where
+    hgetI (_ :& as) = hgetI @HList @as @i as
 
 
 instance TypeError

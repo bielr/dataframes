@@ -16,4 +16,4 @@ type family FoldConstraints cs = r | r -> cs where
 type Tupled :: [Constraint] -> Constraint
 
 class FoldConstraints cs => Tupled cs where
-    instAt :: i < Length cs => SNat i -> ((cs !! i) => r) -> r
+    instAt :: i < Length cs => SNat i -> (cs !! i => r) -> r

@@ -8,17 +8,17 @@ import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
 
 
-type HGetI :: forall {k}. HTyConK k -> k -> [k] -> Peano -> Constraint
+type HGetI :: forall {k}. HTyConK k -> [k] -> Peano -> Constraint
 
-class (rs !! i) ~ r => HGetI hf r rs i | rs i -> r where
-    hgetI :: hf f rs -> f r
+class HGetI hf rs i where
+    hgetI :: hf f rs -> f (rs !! i)
 
 
 type HSetI :: forall {k}. HTyConK k -> k -> k -> [k] -> [k] -> Peano -> Constraint
 
 class
-    ( HGetI hf r rs i
-    , HGetI hf r' rs' i
+    ( HGetI hf rs i,  r  ~ rs  !! i
+    , HGetI hf rs' i, r' ~ rs' !! i
     , ReplaceSubseqI '[r] '[r'] rs rs' '[i]
     )
     => HSetI hf r r' rs rs' i | rs r' i -> rs', rs' r i -> rs where
@@ -27,20 +27,20 @@ class
 
     hmemberI :: Lens (hf f rs) (hf f rs') (f r) (f r')
     hmemberI =
-        lens (hgetI @hf @r @rs @i) (flip (hsetI @hf @r @r' @rs @rs' @i))
+        lens (hgetI @hf @rs @i) (flip (hsetI @hf @r @r' @rs @rs' @i))
     {-# inline hmemberI #-}
 
 
-type HGet :: forall k. HTyConK k -> k -> [k] -> Constraint
-type HGet hf r rs = HGetI hf r rs (IndexOf r rs)
+type HGet :: forall k. HTyConK k -> [k] -> k -> Constraint
+type HGet hf rs r = (HGetI hf rs (IndexOf r rs), r ~ rs !! IndexOf r rs)
 
 
 type HSet :: forall k. HTyConK k -> k -> k -> [k] -> [k] -> Constraint
 type HSet hf r r' rs rs' = HSetI hf r r' rs rs' (IndexOf r rs)
 
 
-hget :: forall r rs f hf.  HGet hf r rs => hf f rs -> f r
-hget = hgetI @_ @_ @_ @(IndexOf r rs)
+hget :: forall r rs f hf.  HGet hf rs r => hf f rs -> f r
+hget = hgetI @_ @_ @(IndexOf r rs)
 
 
 hset :: forall r r' rs rs' f hf. HSet hf r r' rs rs' => f r' -> hf f rs -> hf f rs'

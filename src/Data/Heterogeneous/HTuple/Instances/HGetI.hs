@@ -13,10 +13,7 @@ $(forTH [0..maxInstances] \n -> do
 
     forTH [0..n-1] \i ->
         [d|
-          instance
-              a ~ $(gen_aTys cxt !! i)
-              => HGetI HTuple a $(gen_listTy cxt) $(peanoTys !! i) where
-
+          instance HGetI HTuple $(gen_listTy cxt) $(peanoTys !! i) where
               hgetI $(gen_tupPat cxt) = $(gen_aExps cxt !! i)
               {-# inline hgetI #-}
           |])

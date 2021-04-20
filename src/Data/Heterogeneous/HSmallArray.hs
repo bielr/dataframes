@@ -49,9 +49,6 @@ type HSmallArray :: forall k. HTyConK k
 newtype HSmallArray f as = HSmallArray (SA.SmallArray Any)
 
 
-unsafeHSmallArrayFromListN :: SNat (Length as) -> [Any] -> HSmallArray f as
-unsafeHSmallArrayFromListN n as = HSmallArray $ SA.smallArrayFromListN (snat n) as
-
 hSmallArrayToList :: HSmallArray f as -> [Any]
 hSmallArrayToList (HSmallArray arr) = toList arr
 
@@ -59,6 +56,20 @@ hSmallArrayToList (HSmallArray arr) = toList arr
 uninitializedElement :: String -> Any
 uninitializedElement origin =
     error ("Data.Heterogeneous.HSmallArray: " ++ origin ++ ": uninitialized element")
+
+
+unsafeHSmallArrayFromListN :: SNat (Length as) -> [Any] -> HSmallArray f as
+unsafeHSmallArrayFromListN n as = HSmallArray $ SA.runSmallArray do
+    marr :: SA.SmallMutableArray s Any
+        <- SA.newSmallArray (snat n) (uninitializedElement "unsafeHSmallArrayFromListN")
+
+    let go :: Int -> [Any] -> ST s ()
+        go !_ []     = return ()
+        go !i (b:bs) = SA.writeSmallArray marr i (unsafeCoerce $! b) >> go (i+1) bs
+
+    go 0 as
+
+    return marr
 
 
 create :: forall as f.
@@ -280,24 +291,24 @@ instance HSingleton HSmallArray where
 
 instance HMonoid HSmallArray where
     hempty = HSmallArray mempty
-    {-# inline hempty #-}
+    {-# noinline hempty #-}
 
     happend (HSmallArray as) (HSmallArray bs) = HSmallArray (as <> bs)
-    {-# inline happend #-}
+    {-# noinline happend #-}
 
     hcons fa (HSmallArray arr) = HSmallArray $ SA.runSmallArray do
         marr' <- SA.newSmallArray (SA.sizeofSmallArray arr + 1) (uninitializedElement "hcons")
         SA.writeSmallArray marr' 0 $! unsafeCoerce fa
         SA.copySmallArray marr' 1 arr 0 (SA.sizeofSmallArray arr)
         return marr'
-    {-# inline hcons #-}
+    {-# noinline hcons #-}
 
     hsnoc (HSmallArray arr) fa = HSmallArray $ SA.runSmallArray do
         marr' <- SA.newSmallArray (SA.sizeofSmallArray arr + 1) (uninitializedElement "hcons")
         SA.copySmallArray marr' 0 arr 0 (SA.sizeofSmallArray arr)
         SA.writeSmallArray marr' (SA.sizeofSmallArray arr) $! unsafeCoerce fa
         return marr'
-    {-# inline hsnoc #-}
+    {-# noinline hsnoc #-}
 
 
 instance KnownLength as => HCreate HSmallArray as where
@@ -443,7 +454,7 @@ instance KnownLength as => HConv HList.HList HSmallArray as where
 
         go 0 hlist
         return marr
-    {-# inline hconv #-}
+    {-# inlinable hconv #-}
 
 
 $(concat <$> forM [1..16] \n -> do

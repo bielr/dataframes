@@ -3,9 +3,7 @@ module Data.Frame.Sugar
     , C.IsFrame
     , C.HasColumn
     , C.ColumnarFrame
-    , C.FromSingleColumn
-    , C.ConcatCols
-    , C.AppendCol
+    , C.FrameMerge
     , C.GenerateFrame
     , C.CompatibleFields
     , C.CompatibleDataTypes
@@ -26,12 +24,16 @@ module Data.Frame.Sugar
     , C.withFrame
     , C.getRowIndex
 
-    , Frame
-    , frameFromCols
+    , C.toCols
+    , C.editColsWith
+    , C.insertColumnWith
+    , C.extendFrameWith
     , C.generateFrame
 
-    , C.appendCol
-    , C.prependCol
+    , Frame
+    , frameFromCols
+
+    , appendCol
     , transmute
     , transmute'
     , transmute2
@@ -54,6 +56,7 @@ import Data.Frame.Series.VectorSeries (VectorSeries)
 import Data.Frame.TypeIndex
 
 import Data.Heterogeneous.Class.HCoerce
+import Data.Heterogeneous.Class.HMonoid
 import Data.Heterogeneous.Class.TupleView
 import Data.Heterogeneous.Constraints
 import Data.Heterogeneous.HList
@@ -133,6 +136,17 @@ frameFromCols :: forall cols t.
     -> Frame cols
 frameFromCols =
     fromMaybe (error "frameFromCols: column length mismatch") . frameFromColsMaybe
+
+
+appendCol ::
+    ( C.InsertColumn df
+    , HMonoid (C.ColumnarHRep df)
+    , CompatibleField (C.Column df) col
+    )
+    => Eval df cols (Field col)
+    -> df cols
+    -> df (cols ++ '[col])
+appendCol = C.insertColumnWith hsnoc
 
 
 transmute :: forall cols cols' t df df'.

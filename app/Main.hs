@@ -1,5 +1,5 @@
 {-# options_ghc -Wno-error=unused-do-bind -fplugin=Data.Frame.Plugin
-    -O2 -ddump-to-file -ddump-simpl -dsuppress-all -dsuppress-idinfo -dsuppress-unfoldings -dsuppress-coercions #-}
+    -O2 -ddump-to-file -ddump-simpl -dsuppress-idinfo -dsuppress-unfoldings -dsuppress-coercions #-}
 --  #-}
 {-# language PartialTypeSignatures #-}
 {-# language QualifiedDo #-}
@@ -46,10 +46,11 @@ testFromCols = frameFromCols
     , #c =.. [[0], [0..1], [0..2], [0..3] :: [Int]]
     , #d =.. [EvilShow, undefined, EvilShow, EvilShow]
     )
+{-# noinline testFromCols #-}
 
 
-testEval :: Eval Frame '["a":>Int, "b":>Char, "c":>Double] Double
-testEval = [_eval| fromIntegral ?a + ?c |]
+testEval :: Eval Frame '["a":>Int, "b":>Char, "c":>Double] (Field ("d":>Double))
+testEval = [_eval| #d =. fromIntegral ?a + ?c |]
 
 
 testAppend ::

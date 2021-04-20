@@ -60,31 +60,31 @@ instance VGM.MVector (MVectorTypeOf a) a => VGM.MVector MVector a where
     basicOverlaps (MVector v) (MVector v')      = VGM.basicOverlaps v v'
     basicUnsafeNew len                          = MVector <$> VGM.basicUnsafeNew len
     basicInitialize (MVector v)                 = VGM.basicInitialize v
-    basicUnsafeReplicate len a                  = MVector <$> VGM.basicUnsafeReplicate len a
+    basicUnsafeReplicate len !a                 = VGM.basicUnsafeReplicate len a
     basicUnsafeRead (MVector v) i               = VGM.basicUnsafeRead v i
-    basicUnsafeWrite (MVector v) i              = VGM.basicUnsafeWrite v i
+    basicUnsafeWrite (MVector v) i !a           = VGM.basicUnsafeWrite v i a
     basicClear (MVector v)                      = VGM.basicClear v
-    basicSet (MVector v) a                      = VGM.basicSet v a
+    basicSet (MVector v) !a                     = VGM.basicSet v a
     basicUnsafeCopy (MVector tgt) (MVector src) = VGM.basicUnsafeCopy tgt src
     basicUnsafeMove (MVector tgt) (MVector src) = VGM.basicUnsafeMove tgt src
     basicUnsafeGrow (MVector v) len             = MVector <$> VGM.basicUnsafeGrow v len
 
 
 instance VG.Vector (VectorTypeOf a) a => VG.Vector Vector a where
-    basicUnsafeFreeze (MVector v)           = fmap Vector (VG.basicUnsafeFreeze v)
-    basicUnsafeThaw (Vector v)              = fmap MVector (VG.basicUnsafeThaw v)
+    basicUnsafeFreeze (MVector v)           = Vector <$> VG.basicUnsafeFreeze v
+    basicUnsafeThaw (Vector v)              = MVector <$> VG.basicUnsafeThaw v
     basicLength (Vector v)                  = VG.basicLength v
     basicUnsafeSlice start len (Vector v)   = Vector (VG.basicUnsafeSlice start len v)
     basicUnsafeIndexM (Vector v) i          = VG.basicUnsafeIndexM v i
     basicUnsafeCopy (MVector mv) (Vector v) = VG.basicUnsafeCopy mv v
-    elemseq (Vector v) a b                  = VG.elemseq v a b
+    elemseq (Vector v) a b                  = a `seq` VG.elemseq v a b
 
 
-deriving newtype instance
-    ( IsList (VectorTypeOf a a)
-    , Item (VectorTypeOf a a) ~ a
-    )
-    => IsList (Vector a)
+instance VG.Vector (VectorTypeOf a) a => IsList (Vector a) where
+    type Item (Vector a) = a
+    toList = VG.toList
+    fromList = VG.fromList
+    fromListN = VG.fromListN
 
 
 type instance L.Index (Vector a) = Int

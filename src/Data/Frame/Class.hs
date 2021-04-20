@@ -115,60 +115,89 @@ class IsFrame df => ColumnarFrame df where
     toCols :: df cols -> ColumnarHRep df (Column df) cols
 
 
-class IsFrame df => FromSingleColumn df where
-    fromSingleCol ::
-        CompatibleDataType (Column df) (FieldType col)
-        => Column df col
-        -> df '[col]
-
-
-class ColumnarFrame df => ConcatCols df where
-    unsafeConcatCols :: df cols -> df cols' -> df (cols ++ cols')
-
-
-class ColumnarFrame df => AppendCol df where
-    appendCol ::
-        CompatibleDataType (Column df) (FieldType col)
-        => Eval df cols (Field col)
+class IsFrame df => ColumnarFrameEdit df where
+    editColsWith ::
+        (forall f. ColumnarHRep df f cols -> ColumnarHRep df f cols')
         -> df cols
-        -> df (cols ++ '[col])
+        -> df cols'
 
-    prependCol ::
-        CompatibleDataType (Column df) (FieldType col)
-        => Eval df cols (Field col)
+
+class (ColumnarFrame df, ColumnarFrame df', ColumnarFrameEdit (MergedFrame df df'))
+    => FrameMerge df df' where
+
+    type MergedFrame df df' :: FrameK
+
+    unsafeMergeFramesWith ::
+        (forall f.
+            ColumnarHRep df f cols
+            -> ColumnarHRep df' f cols'
+            -> ColumnarHRep (MergedFrame df df') f cols'')
         -> df cols
-        -> df (col ': cols)
+        -> df' cols'
+        -> MergedFrame df df' cols''
 
 
-    default appendCol :: forall col cols.
-        ( FromSingleColumn df
-        , ConcatCols df
-        , GenerateSeries (Column df)
-        , CompatibleDataType (Column df) (FieldType col)
-        )
-        => Eval df cols (Field col)
+class (ColumnarFrameEdit df, GenerateSeries (Column df)) => InsertColumn df where
+    insertColumnWith ::
+        CompatibleField (Column df) col
+        => (forall f. ColumnarHRep df f cols -> f col -> ColumnarHRep df f cols')
+        -> Eval df cols (Field col)
         -> df cols
-        -> df (cols ++ '[col])
-    appendCol ecol df =
-        unsafeConcatCols df (fromSingleCol newCol)
-      where
-        newCol = generateSeries @_ @col $ fmap getField (runEval df ecol)
+        -> df cols'
 
 
-    default prependCol :: forall col cols.
-        ( FromSingleColumn df
-        , ConcatCols df
-        , GenerateSeries (Column df)
-        , CompatibleDataType (Column df) (FieldType col)
-        )
-        => Eval df cols (Field col)
+class InsertColumn df => ExtendFrame df hf cols' where
+    extendFrameWith ::
+        CompatibleFields df cols'
+        => (forall f. ColumnarHRep df f cols -> ColumnarHRep df f cols' -> ColumnarHRep df f cols'')
+        -> Eval df cols (hf Field cols')
         -> df cols
-        -> df (col ': cols)
-    prependCol ecol df =
-        unsafeConcatCols (fromSingleCol newCol) df
-      where
-        newCol = generateSeries @_ @col $ fmap getField (runEval df ecol)
+        -> df cols''
 
 
-class (IsFrame df, GenerateSeries (Column df)) => GenerateFrame df hf cols where
+class ExtendFrame df hf cols => GenerateFrame df hf cols where
     generateFrame :: CompatibleFields df cols => Indexer (hf Field cols) -> df cols
+
+
+-- class ColumnarFrame df => AppendCol df where
+--     appendCol ::
+--         CompatibleDataType (Column df) (FieldType col)
+--         => Eval df cols (Field col)
+--         -> df cols
+--         -> df (cols ++ '[col])
+--
+--     prependCol ::
+--         CompatibleDataType (Column df) (FieldType col)
+--         => Eval df cols (Field col)
+--         -> df cols
+--         -> df (col ': cols)
+--
+--
+--     default appendCol :: forall col cols.
+--         ( FromSingleColumn df
+--         , ConcatCols df
+--         , GenerateSeries (Column df)
+--         , CompatibleDataType (Column df) (FieldType col)
+--         )
+--         => Eval df cols (Field col)
+--         -> df cols
+--         -> df (cols ++ '[col])
+--     appendCol ecol df =
+--         unsafeConcatCols df (fromSingleCol newCol)
+--       where
+--         newCol = generateSeries @_ @col $ fmap getField (runEval df ecol)
+--
+--
+--     default prependCol :: forall col cols.
+--         ( FromSingleColumn df
+--         , ConcatCols df
+--         , GenerateSeries (Column df)
+--         , CompatibleDataType (Column df) (FieldType col)
+--         )
+--         => Eval df cols (Field col)
+--         -> df cols
+--         -> df (col ': cols)
+--     prependCol ecol df =
+--         unsafeConcatCols (fromSingleCol newCol) df
+--       where
+--         newCol = generateSeries @_ @col $ fmap getField (runEval df ecol)

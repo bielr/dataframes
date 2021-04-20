@@ -31,8 +31,7 @@ import Data.Heterogeneous.Class.HCoerce
 import Data.Heterogeneous.Class.HConv
 import Data.Heterogeneous.Class.HCreate
 import Data.Heterogeneous.Class.HFoldable
---import Data.Heterogeneous.Class.HFunctor
-import Data.Heterogeneous.Class.HMonoid
+import Data.Heterogeneous.Class.HFunctor
 import Data.Heterogeneous.Class.HTraversable
 import Data.Heterogeneous.Class.Member
 import Data.Heterogeneous.Class.Subseq
@@ -69,7 +68,7 @@ instance IsSeries series => IsFrame (Columns hf series) where
     runEval df@(Columns n _) (RowwiseEval rww) = Indexer n $! runRowwise rww df
 
 
-runEnvColumn :: forall col cols df.
+evalColumn :: forall col cols df.
     ( IsFrame df
     , GenerateSeries (Column df)
     , CompatibleDataType (Column df) (FieldType col)
@@ -77,7 +76,7 @@ runEnvColumn :: forall col cols df.
     => df cols
     -> Eval df cols (FieldType col)
     -> Column df col
-runEnvColumn df = generateSeries . runEval df
+evalColumn df = generateSeries . runEval df
 
 
 instance
@@ -93,21 +92,42 @@ instance IsSeries series => ColumnarFrame (Columns hf series) where
     toCols (Columns _ cols) = cols
 
 
-instance (IsSeries series, HSingleton hf) => FromSingleColumn (Columns hf series) where
-    fromSingleCol series = Columns (seriesLength series) (hsingleton # series)
+instance IsSeries series => ColumnarFrameEdit (Columns hf series) where
+    editColsWith f (Columns n cols) = Columns n (f cols)
 
 
-instance (IsSeries series, HMonoid hf) => ConcatCols (Columns hf series) where
-    unsafeConcatCols (Columns n cols) (Columns m cols') =
-        Columns (checkLengths n m) (cols `happend` cols')
+instance GenerateSeries series => InsertColumn (Columns hf series) where
+    insertColumnWith insert ecol df@(Columns n cols) =
+        Columns n (insert cols (evalColumn df (getField <$> ecol)))
 
 
-instance (GenerateSeries series, HMonoid hf) => AppendCol (Columns hf series) where
-    appendCol (env :: Eval df cols (Field col)) df@(Columns n cols) =
-        Columns n (cols `hsnoc` runEnvColumn @col df (getField <$> env))
+-- instance (IsSeries series, HSingleton hf) => FromSingleColumn (Columns hf series) where
+--     fromSingleCol series = Columns (seriesLength series) (hsingleton # series)
 
-    prependCol (env :: Eval df cols (Field col)) df@(Columns n cols) =
-        Columns n (runEnvColumn @col df (getField <$> env) `hcons` cols)
+
+instance
+    ( IsSeries series
+    , IsSeries series'
+    , hf ~ hf'
+    , series ~ series'
+    )
+    => FrameMerge (Columns hf series) (Columns hf' series') where
+
+    type MergedFrame (Columns hf series) (Columns hf' series') = Columns hf series
+
+    unsafeMergeFramesWith weave (Columns n cols) (Columns m cols') =
+        Columns (checkLengths n m) (weave cols cols')
+
+
+instance
+    ( HCreate hg cols'
+    , HTraversable hg cols'
+    , HConv hg hf cols'
+    )
+    => ExtendFrame (Columns hf VectorSeries) hg cols' where
+
+    extendFrameWith weave ecols' df@(Columns n cols) =
+        Columns n $ weave cols (hconv (generateVecCols (runEval df ecols')))
 
 
 instance
@@ -116,7 +136,9 @@ instance
     , HConv hg hf cols
     )
     => GenerateFrame (Columns hf VectorSeries) hg cols where
-    generateFrame gen = over columns hconv (generateVecCols gen)
+
+    generateFrame gen@(Indexer n _) =
+        Columns n $ hconv (generateVecCols gen)
 
 
 checkLengths :: HasCallStack => Int -> Int -> Int
@@ -192,10 +214,10 @@ restricting _ f df@(Columns n _) =
 
 
 
--- type FieldWriter :: Type -> FieldK -> Type
--- newtype FieldWriter s col = FieldWriter
---     { writeField :: Int -> Field col -> ST.ST s ()
---     }
+type FieldWriter :: Type -> FieldK -> Type
+newtype FieldWriter s col = FieldWriter
+    { writeField :: Int -> Field col -> ST.ST s ()
+    }
 
 
 generateVecCols :: forall cols hf.
@@ -204,22 +226,18 @@ generateVecCols :: forall cols hf.
     , All (CompatibleField VectorSeries) cols
     )
     => Indexer (hf Field cols)
-    -> Columns hf VectorSeries cols
+    -> hf VectorSeries cols
 generateVecCols (Indexer n fieldsGen) = ST.runST do
     mcols' <- initMVs
 
-    --let writers = toWriters mcols'
+    let writers = toWriters mcols'
 
     forM_ [0..n-1] \i ->
-        hitraverse2_
-            (constrained @(CompatibleField VectorSeries) @cols \(MVectorSeries mv) (Field a) ->
-                VGM.unsafeWrite mv i a)
-            mcols'
+        htraverse2_ (\w a -> writeField w i a)
+            writers
             (fieldsGen i)
 
-    cols <- freezeCols mcols'
-
-    return (Columns n cols)
+    freezeCols mcols'
   where
     initMVs :: ST.ST s (hf (MVectorSeries s) cols)
     initMVs =
@@ -233,7 +251,7 @@ generateVecCols (Indexer n fieldsGen) = ST.runST do
             constrained @(CompatibleField VectorSeries) @cols \(MVectorSeries mv) ->
                 VectorSeries <$> VG.unsafeFreeze mv
 
-    -- toWriters :: hf (MVectorSeries s) cols -> hf (FieldWriter s) cols
-    -- toWriters =
-    --     hmapC @(CompatibleField VectorSeries) \(MVectorSeries mv) ->
-    --         FieldWriter (\i a -> VGM.unsafeWrite mv i (getField a))
+    toWriters :: hf (MVectorSeries s) cols -> hf (FieldWriter s) cols
+    toWriters =
+        hmapC @(CompatibleField VectorSeries) \(MVectorSeries mv) ->
+            FieldWriter (\i a -> VGM.unsafeWrite mv i (getField a))

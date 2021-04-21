@@ -19,6 +19,7 @@ import Control.Monad.ST qualified as ST
 import Control.Monad.Primitive (MonadPrim, PrimMonad)
 import Control.Rowwise
 import Data.Profunctor.Unsafe
+import Data.Roles
 import Data.Type.Coercion
 import Data.Vector.Generic qualified as VG
 import Data.Vector.Generic.Mutable qualified as VGM
@@ -74,6 +75,10 @@ instance IsSeries series => IsFrame (Columns hf series) where
     runEval df@(Columns n _) (RowwiseEval rww) = Indexer n (runRowwise rww df)
 
 
+instance Representational (Eval (Columns hf series) cols) where
+    rep Coercion = Coercion
+
+
 instance
     ( IsSeries series
     , CompatibleDataType series (FieldType (cols !! i))
@@ -111,16 +116,7 @@ instance (HMonoid hf, IsSeries series) => EmptyFrame (Columns hf series) where
     emptyFrame n = Columns n hempty
 
 
-instance
-    ( IsSeries series
-    , IsSeries series'
-    , hf ~ hf'
-    , series ~ series'
-    )
-    => FrameMerge (Columns hf series) (Columns hf' series') where
-
-    type MergedFrame (Columns hf series) (Columns hf' series') = Columns hf series
-
+instance IsSeries series => FrameMerge (Columns hf series) where
     unsafeMergeFramesWith weave (Columns n cols) (Columns m cols') =
         Columns (checkLengths n m) (weave cols cols')
 

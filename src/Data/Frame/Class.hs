@@ -8,9 +8,9 @@ import Prelude hiding ((.))
 
 import Control.Category (Category(..))
 import Control.Lens.Type
-import Data.Coerce
 import Data.Functor.Identity
 import Data.Profunctor.Unsafe
+import Data.Roles
 import Data.Type.Coercion
 
 import Data.Frame.Field
@@ -42,7 +42,7 @@ class
     -- Eval must be an Applicative functor
     , forall cols. Applicative (Eval df cols)
     -- Eval df cols must have a representational argument
-    , forall cols a b. Coercible a b => Coercible (Eval df cols a) (Eval df cols b)
+    , forall cols. Representational (Eval df cols)
     )
     => IsFrame df where
 
@@ -59,7 +59,7 @@ class
 
 
 frameEvalCo :: IsFrame df => (a :~>: b) -> (Eval df cols a :~>: Eval df cols b)
-frameEvalCo Coercion = Coercion
+frameEvalCo = rep
 
 
 htupleEvalCo :: forall t f df cols cols'.
@@ -163,23 +163,31 @@ class IsFrame df => ColumnarFrameEdit df where
         -> df cols'
 
 
+    splitFrameWith ::
+        (forall f.
+            ColumnarHRep df f cols
+            -> (ColumnarHRep df f cols', ColumnarHRep df f cols''))
+        -> df cols
+        -> (df cols', df cols'')
+    splitFrameWith split df =
+        ( editColsWith (fst . split) df
+        , editColsWith (snd . split) df
+        )
+
+
 class IsFrame df => EmptyFrame df where
     emptyFrame :: Int -> df '[]
 
 
-class (ColumnarFrame df, ColumnarFrame df', ColumnarFrameEdit (MergedFrame df df'))
-    => FrameMerge df df' where
-
-    type MergedFrame df df' :: FrameK
-
+class ColumnarFrameEdit df => FrameMerge df where
     unsafeMergeFramesWith ::
         (forall f.
             ColumnarHRep df f cols
-            -> ColumnarHRep df' f cols'
-            -> ColumnarHRep (MergedFrame df df') f cols'')
+            -> ColumnarHRep df f cols'
+            -> ColumnarHRep df f cols'')
         -> df cols
-        -> df' cols'
-        -> MergedFrame df df' cols''
+        -> df cols'
+        -> df cols''
 
 
 class (ColumnarFrameEdit df, GenerateSeries m (Column df)) => InsertColumn m df where
@@ -191,7 +199,7 @@ class (ColumnarFrameEdit df, GenerateSeries m (Column df)) => InsertColumn m df 
         -> m (df cols')
 
 
-insertColumnWith ::
+insertColumnWith :: forall col df cols cols'.
     ( InsertColumn Identity df
     , CompatibleField (Column df) col
     )
@@ -200,7 +208,9 @@ insertColumnWith ::
     -> df cols
     -> df cols'
 insertColumnWith insert =
-    (runIdentity .) #. insertColumnWithM insert .# fmap Identity
+    (runIdentity .)
+        #. insertColumnWithM insert
+        . coerceWith (frameEvalCo Coercion)
 
 
 class InsertColumn m df => ExtendFrame m df hf cols' where
@@ -224,7 +234,12 @@ extendFrameWith ::
     -> df cols
     -> df cols''
 extendFrameWith insert =
-    (runIdentity .) #. extendFrameWithM insert .# fmap Identity
+    (runIdentity .)
+        #. extendFrameWithM insert
+        . coerceWith (frameEvalCo idCo)
+  where
+    idCo :: a :~>: Identity a
+    idCo = Coercion
 
 
 class ExtendFrame m df hf cols' => ExtendFrameMaybe m df hf cols cols' where
@@ -248,7 +263,13 @@ extendFrameWithMaybe ::
     -> df cols
     -> df cols''
 extendFrameWithMaybe insert =
-    (runIdentity .) #. extendFrameWithMaybeM insert .# fmap Identity
+    (runIdentity .)
+        #. extendFrameWithMaybeM insert
+        . coerceWith (frameEvalCo idCo)
+  where
+    idCo :: a :~>: Identity a
+    idCo = Coercion
+
 
 
 type GenerateFrame m df hf cols =

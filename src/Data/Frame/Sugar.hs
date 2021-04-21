@@ -56,10 +56,9 @@ module Data.Frame.Sugar
 
 import GHC.Stack (HasCallStack)
 
-import Data.Coerce
 import Data.Functor.Identity
 import Data.Maybe (fromMaybe)
-import Data.Profunctor.Unsafe
+import Data.Roles
 import Data.Type.Coercion
 
 import Data.Frame.Class (Eval)
@@ -121,7 +120,8 @@ val :: forall col cols i df proxy.
     )
     => proxy
     -> Eval df cols (FieldType col)
-val = fmap getField #. fld
+val =
+    coerceWith (rep fieldValueCo) . fld
 
 
 frameFromColsMaybe :: forall cols t.
@@ -191,7 +191,8 @@ appendColsMaybe :: forall cols' cols df t.
     -> df (cols ++ cols')
 appendColsMaybe emcols' =
     C.extendFrameWithMaybe @df @HTuple @cols @cols' happend $
-        gcoerceWith (htupleCoF @Field @cols' @t) (coerce emcols')
+        coerceWith (rep $ rep $ htupleCoF @Field @cols' @t) $
+            emcols'
 
 
 transmute :: forall cols cols' t df df'.

@@ -69,6 +69,7 @@ common shared-properties
     , lens
     , primitive
     , profunctors
+    , roles
     , tagged
     , template-haskell
     , text
@@ -96,6 +97,7 @@ library
       Data.Frame.Sugar
       Data.Frame.TH.Eval
       Data.Frame.TypeIndex
+      Data.Frame.Zoomed
       Data.Functor.Boilerplate
       Data.Heterogeneous.Class.HApply
       Data.Heterogeneous.Class.HCoerce

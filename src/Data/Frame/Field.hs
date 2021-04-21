@@ -6,6 +6,7 @@
 module Data.Frame.Field
   ( Field(..)
   , fieldName
+  , fieldValueCo
   , fieldValue
   , renamed
   , renamedTo
@@ -20,6 +21,7 @@ import Control.Lens.Type
 import qualified Control.Lens as L
 
 import Data.Functor.Boilerplate
+import Data.Type.Coercion
 import qualified Data.Vector.Generic         as VG
 import qualified Data.Vector.Generic.Mutable as VGM
 import qualified Data.Vector.Unboxed         as VU
@@ -83,6 +85,11 @@ instance RemoveBoilerplate Field where
 fieldName :: forall col. KnownSymbol (FieldName col) => Proxy# col -> String
 fieldName _ = symbolVal' @(FieldName col) proxy#
 {-# inline fieldName #-}
+
+
+fieldValueCo :: Coercion (Field col) (FieldType col)
+fieldValueCo = Coercion
+{-# inline fieldValueCo #-}
 
 
 fieldValue :: forall s a b. Iso (Field (s :> a)) (Field (s :> b)) a b

@@ -23,6 +23,7 @@ import Data.Frame.Kind
 import Data.Frame.Pipe qualified as Pipe
 import Data.Frame.Sugar
 import Data.Frame.TH.Eval
+import Data.Frame.Zoomed
 
 
 
@@ -114,8 +115,9 @@ testTransmuteAppend df = df
             Just (#x =. x, #sqrt_x =. sqrt (fromIntegral x :: Float))
         |]
 
-    & appendCol [_eval| #sqrt_x_sq =. ?sqrt_x**2 |]
-    & appendCol [_eval| #diff =. fromIntegral ?x - ?sqrt_x_sq |]
+    & zooming' (#x, #sqrt_x) %~ Pipe.do
+        appendCol [_eval| #sqrt_x_sq =. ?sqrt_x**2 |]
+        appendCol [_eval| #diff =. fromIntegral ?x - ?sqrt_x_sq |]
 
     & printFrame
 {-# noinline testTransmuteAppend #-}

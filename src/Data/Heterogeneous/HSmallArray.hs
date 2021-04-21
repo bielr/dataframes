@@ -133,6 +133,7 @@ createA n f =
 
 unsafeIndex :: HSmallArray f as -> SNat i -> f a
 unsafeIndex (HSmallArray arr) i = unsafeCoerce $ SA.indexSmallArray arr (snat i)
+{-# noinline unsafeIndex #-}
 
 
 index :: i < Length as => HSmallArray f as -> SNat i -> f (as !! i)
@@ -149,14 +150,11 @@ unsafeSetIndex (HSmallArray arr) i !fa = do
         marr <- SA.thawSmallArray arr 0 (SA.sizeofSmallArray arr)
         SA.writeSmallArray marr (snat i) (unsafeCoerce fa)
         return marr
+{-# noinline unsafeSetIndex #-}
 
 
 setIndex :: i < Length as => HSmallArray f as -> SNat i -> f (as !! i) -> HSmallArray f as
-setIndex (HSmallArray arr) i !fa =
-    HSmallArray $ SA.runSmallArray do
-        marr <- SA.thawSmallArray arr 0 (SA.sizeofSmallArray arr)
-        SA.writeSmallArray marr (snat i) (unsafeCoerce fa)
-        return marr
+setIndex = unsafeSetIndex
 
 
 setIndexViaSubseq ::
@@ -196,6 +194,7 @@ getSubseq :: forall is ss rs f.
     => HSmallArray f rs
     -> HSmallArray f ss
 getSubseq = unsafeIndexAll @is
+{-# inline getSubseq #-}
 
 
 getSubset :: forall is ss rs f.
@@ -206,6 +205,7 @@ getSubset :: forall is ss rs f.
     => HSmallArray f rs
     -> HSmallArray f ss
 getSubset = unsafeIndexAll @is
+{-# inline getSubset #-}
 
 
 setSubset :: forall is ss rs f.
@@ -224,22 +224,26 @@ setSubset (HSmallArray upd) (HSmallArray arr) =
             SA.writeSmallArray marr i $! SA.indexSmallArray upd j
 
         return marr
+{-# inlinable setSubset #-}
 
 
 instance AllF Eq f as => Eq (HSmallArray f as) where
     (==) =
         hifoldr2 (\i a b eq -> constrained @(ComposeC Eq f) @as (a == b) i && eq) True
+    {-# inline (==) #-}
 
 
 instance (AllF Eq f as, AllF Ord f as) => Ord (HSmallArray f as) where
     compare =
         hifoldr2 (\i a b eq -> constrained @(ComposeC Ord f) @as (compare a b) i <> eq) EQ
+    {-# inline compare #-}
 
 
 instance AllF Show f as => Show (HSmallArray f as) where
     showsPrec _ =
         showListWith id
         . hitoListWith \i a -> constrained @(ComposeC Show f) @as (shows a) i
+    {-# inlinable showsPrec #-}
 
 
 instance AllF Hashable f as => Hashable (HSmallArray f as) where
@@ -249,12 +253,14 @@ instance AllF Hashable f as => Hashable (HSmallArray f as) where
                 0 -> constrained @(ComposeC Hashable f) @as (hash a) i
                 _ -> constrained @(ComposeC Hashable f) @as (h `hashWithSalt` a) i)
             0
+    {-# inline hash #-}
 
     hashWithSalt =
         hifoldl' \h i a ->
             case snat i of
                 0 -> constrained @(ComposeC Hashable f) @as (hash a) i
                 _ -> constrained @(ComposeC Hashable f) @as (h `hashWithSalt` a) i
+    {-# inline hashWithSalt #-}
 
 
 instance KnownPeano i => HGetI HSmallArray as i where
@@ -360,7 +366,9 @@ instance
     => HSubsetI HSmallArray ss rs is where
 
     hgetSubsetI = getSubset @is
+    {-# inline hgetSubsetI #-}
     hsetSubsetI = setSubset @is
+    {-# inline hsetSubsetI #-}
 
 
 instance
@@ -472,5 +480,5 @@ $(concat <$> forM [1..16] \n -> do
             fromHTuple $(gen_tupPat cxt) =
                 unsafeHSmallArrayFromListN (getSNat @($(peanoTys !! n))) $
                     $(TH.listE [ [e| unsafeCoerce $aE |] | aE <- gen_aExps cxt])
-            {-# inline fromHTuple #-}
+            {-# noinline fromHTuple #-}
       |])

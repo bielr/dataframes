@@ -50,19 +50,37 @@ seriesLength ::
 seriesLength = length . indexSeries
 
 
-class IsSeries series => GenerateSeries series where
-    generateSeries ::
+class (IsSeries series, Monad m) => GenerateSeries m series where
+    generateSeriesM ::
         CompatibleDataType series (FieldType col)
-        => Indexer (FieldType col)
-        -> series col
+        => Indexer (m (FieldType col))
+        -> m (series col)
 
     vectorToSeries ::
         ( CompatibleDataType series (FieldType col)
         , VG.Vector v (FieldType col)
         )
         => v (FieldType col)
-        -> series col
-    vectorToSeries = generateSeries . indexVector
+        -> m (series col)
+    vectorToSeries = generateSeriesM . fmap return . indexVector
+
+
+generateSeries ::
+    ( GenerateSeries Identity series
+    , CompatibleDataType series (FieldType col)
+    )
+    => Indexer (FieldType col)
+    -> series col
+generateSeries idx = runIdentity $ generateSeriesM (Identity <$> idx)
+
+
+class IsSeries series => TraversableSeries series where
+    traverseSeries ::
+        ( CompatibleDataType series (FieldType col)
+        , CompatibleDataType series (FieldType col')
+        )
+        => Traversal (series col) (series col') (FieldType col) (FieldType col')
+
 
 
 type CompatibleField :: SeriesK -> FieldK -> Constraint
@@ -95,7 +113,7 @@ seriesFields = seriesValues.coerced
 
 
 seriesIndexer ::
-    ( GenerateSeries series
+    ( GenerateSeries Identity series
     , FieldName col ~ FieldName col'
     , CompatibleDataType series (FieldType col)
     , CompatibleDataType series (FieldType col')
@@ -107,7 +125,7 @@ seriesIndexer = iso indexSeries generateSeries
 
 
 seriesVector ::
-    ( GenerateSeries series
+    ( GenerateSeries Identity series
     , FieldName col ~ FieldName col'
 
     , CompatibleDataType series (FieldType col)
@@ -119,4 +137,4 @@ seriesVector ::
     => Iso
         (series col)        (series col')
         (v (FieldType col)) (w (FieldType col'))
-seriesVector = iso seriesToVector vectorToSeries
+seriesVector = iso seriesToVector (runIdentity . vectorToSeries)

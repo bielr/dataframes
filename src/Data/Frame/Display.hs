@@ -349,7 +349,7 @@ defaultShowOptions :: ShowOptions
 defaultShowOptions = ShowOptions
     { maxFrameWidth      = 120
     , cellMinWidth       = 1
-    , cellMaxWidth       = 10
+    , cellMaxWidth       = 30
     , cellMinHeight      = 1
     , cellMaxHeight      = 2
     , showTitleSeparator = True

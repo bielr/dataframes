@@ -24,13 +24,18 @@ elemAt (Indexer _ ia) = ia
 
 
 indexVector :: VG.Vector v a => v a -> Indexer a
-indexVector v = Indexer (VG.length v) (v `VG.unsafeIndex`)
+indexVector !v = Indexer (VG.length v) (v `VG.unsafeIndex`)
 {-# inline indexVector #-}
 
 
 copyIndexer :: VG.Vector v a => Indexer a -> v a
 copyIndexer (Indexer n ia) = VG.generate n ia
 {-# inline copyIndexer #-}
+
+
+copyIndexerM :: (Monad m, VG.Vector v a) => Indexer (m a) -> m (v a)
+copyIndexerM (Indexer n ia) = VG.generateM n ia
+{-# inline copyIndexerM #-}
 
 
 asIndexer :: (VG.Vector v a, VG.Vector w b) => L.Iso (v a) (w b) (Indexer a) (Indexer b)
@@ -47,13 +52,13 @@ concatIndexersN :: forall a. Int -> [Indexer a] -> Indexer a
 concatIndexersN m ixs = Indexer n ia
   where
     vixs :: VB.Vector (Indexer a)
-    vixs = VB.fromListN m ixs
+    !vixs = VB.fromListN m ixs
 
     breaks :: VU.Vector Int
-    breaks = VU.postscanl' (+) 0 $ VU.convert $ VB.map length $ vixs
+    !breaks = VU.postscanl' (+) 0 $ VU.convert $ VB.map length $ vixs
 
     n :: Int
-    n = VU.last breaks
+    !n = VU.last breaks
 
     ia :: Int -> a
     ia i =
@@ -68,7 +73,7 @@ concatIndexersN m ixs = Indexer n ia
 
 
 instance Applicative Indexer where
-    pure a = Indexer maxBound (const a)
+    pure !a = Indexer maxBound (const a)
     {-# inline pure #-}
     ff <*> fa = Indexer (min (length ff) (length fa)) (elemAt ff <*> elemAt fa)
     {-# inline (<*>) #-}

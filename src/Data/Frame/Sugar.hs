@@ -1,12 +1,16 @@
 module Data.Frame.Sugar
     ( module Exports
+
+    , C.CompatibleFields
+    , C.CompatibleDataTypes
+
     , C.IsFrame
     , C.HasColumn
     , C.ColumnarFrame
+    , C.EmptyFrame
     , C.FrameMerge
+    , C.ExtendFrame
     , C.GenerateFrame
-    , C.CompatibleFields
-    , C.CompatibleDataTypes
 
     , C.Columns
     , HList
@@ -14,6 +18,11 @@ module Data.Frame.Sugar
     , HTuple(..)
     , VectorSeries
 
+    , fieldSpec
+    , fieldAt
+    , fieldNamed
+    , ofFrame
+    , asName
     , (=.)
     , (=..)
     , fld
@@ -26,14 +35,19 @@ module Data.Frame.Sugar
 
     , C.toCols
     , C.editColsWith
+    , C.insertColumnWithM
     , C.insertColumnWith
+    , C.extendFrameWithM
     , C.extendFrameWith
+    , C.generateFrameM
     , C.generateFrame
 
     , Frame
     , frameFromCols
 
     , appendCol
+    , appendCols
+    , appendColsMaybe
     , transmute
     , transmute'
     , transmute2
@@ -42,6 +56,8 @@ module Data.Frame.Sugar
 
 import GHC.Stack (HasCallStack)
 
+import Data.Coerce
+import Data.Functor.Identity
 import Data.Maybe (fromMaybe)
 import Data.Profunctor.Unsafe
 import Data.Type.Coercion
@@ -50,7 +66,7 @@ import Data.Frame.Class (Eval)
 import Data.Frame.Class qualified as C
 import Data.Frame.Field as Exports
 import Data.Frame.Kind as Exports
-import Data.Frame.Impl.ColVectors qualified as C
+import Data.Frame.Columns qualified as C
 import Data.Frame.Series.Class as Exports
 import Data.Frame.Series.VectorSeries (VectorSeries)
 import Data.Frame.TypeIndex
@@ -139,7 +155,7 @@ frameFromCols =
 
 
 appendCol ::
-    ( C.InsertColumn df
+    ( C.InsertColumn Identity df
     , HMonoid (C.ColumnarHRep df)
     , CompatibleField (C.Column df) col
     )
@@ -149,24 +165,55 @@ appendCol ::
 appendCol = C.insertColumnWith hsnoc
 
 
+appendCols ::
+    ( C.ExtendFrame Identity df HTuple cols'
+    , HMonoid (C.ColumnarHRep df)
+
+    , HCoerce HTuple cols'
+    , IsTupleOfF Field cols' t
+    )
+    => Eval df cols t
+    -> df cols
+    -> df (cols ++ cols')
+appendCols ecols' =
+    C.extendFrameWith happend (C.coerceHTupleEval ecols')
+
+
+appendColsMaybe :: forall cols' cols df t.
+    ( C.ExtendFrameMaybe Identity df HTuple cols cols'
+    , HMonoid (C.ColumnarHRep df)
+
+    , HCoerce HTuple cols'
+    , IsTupleOfF Field cols' t
+    )
+    => Eval df cols (Maybe t)
+    -> df cols
+    -> df (cols ++ cols')
+appendColsMaybe emcols' =
+    C.extendFrameWithMaybe @df @HTuple @cols @cols' happend $
+        gcoerceWith (htupleCoF @Field @cols' @t) (coerce emcols')
+
+
 transmute :: forall cols cols' t df df'.
     ( C.IsFrame df'
     , HCoerce HTuple cols'
     , IsTupleOfF Field cols' t
-    , C.GenerateFrame df HTuple cols'
+    , C.EmptyFrame df
+    , C.ExtendFrame Identity df HTuple cols'
     , C.CompatibleFields df cols'
     )
     => Eval df' cols t
     -> df' cols
     -> df cols'
 transmute et df =
-    C.generateFrame (C.runEval df (C.coerceHTupleEval et))
+    C.generateFrame $ C.runEval df (C.coerceHTupleEval et)
 
 
 transmute' :: forall cols cols' t df.
     ( HCoerce HTuple cols'
     , IsTupleOfF Field cols' t
-    , C.GenerateFrame df HTuple cols'
+    , C.EmptyFrame df
+    , C.ExtendFrame Identity df HTuple cols'
     , C.CompatibleFields df cols'
     )
     => Eval df cols t
@@ -176,10 +223,12 @@ transmute' = transmute
 
 
 transmute2 :: forall cols cols' df.
-    ( C.GenerateFrame df HList cols'
+    ( C.EmptyFrame df
+    , C.ExtendFrame Identity df HList cols'
     , C.CompatibleFields df cols'
     )
     => Eval df cols (HList Field cols')
     -> df cols
     -> df cols'
-transmute2 ecols' df = C.generateFrame (C.runEval df ecols')
+transmute2 ecols' df =
+    C.generateFrame $ C.runEval df ecols'

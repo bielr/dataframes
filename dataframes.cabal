@@ -83,13 +83,13 @@ library
   exposed-modules:
       Control.Rowwise
       Data.Frame.Class
+      Data.Frame.Columns
       Data.Frame.DataTypes.Vector
       Data.Frame.DataTypes.VectorMode
       Data.Frame.Series.Class
       Data.Frame.Series.VectorSeries
       Data.Frame.Display
       Data.Frame.Field
-      Data.Frame.Impl.ColVectors
       Data.Frame.Kind
       Data.Frame.Pipe
       Data.Frame.Plugin

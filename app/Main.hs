@@ -1,12 +1,12 @@
 {-# options_ghc -Wno-error=unused-do-bind -fplugin=Data.Frame.Plugin
     -O2 -ddump-to-file -ddump-simpl -dsuppress-idinfo -dsuppress-unfoldings -dsuppress-coercions #-}
 --  #-}
-{-# language PartialTypeSignatures #-}
-{-# language QualifiedDo #-}
 {-# language ImplicitParams #-}
 {-# language OverloadedLabels #-}
 {-# language OverloadedLists #-}
 {-# language OverloadedStrings #-}
+{-# language PartialTypeSignatures #-}
+{-# language QualifiedDo #-}
 {-# language QuasiQuotes #-}
 {-# language TemplateHaskell #-}
 {-# language TupleSections #-}
@@ -15,6 +15,7 @@ module Main where
 import Control.Lens
 import GHC.Tuple
 import Data.Text (Text)
+import Text.Read (readMaybe)
 
 import Data.Frame.DataTypes.VectorMode
 import Data.Frame.Display
@@ -96,29 +97,31 @@ testSingleTransmute df = df
         |]
 
     & printFrameWith defaultShowOptions { cellMaxWidth = 50 }
-
 {-# noinline testSingleTransmute #-}
 
 
 testTransmuteAppend :: Frame '["b":>Int] -> IO ()
 testTransmuteAppend df = df
-    & appendCol [_eval| #c =. show ?b |]
+    & appendCol [_eval| #str_b =. show ?b |]
 
-    & transmute' [_eval|
-        let x = ?b + read ?c
-        in (#x =. x, #sqrt_x =. sqrt (fromIntegral x :: Float))
+    & appendColsMaybe [_eval| do
+        cInt <- readMaybe (? val #str_b)
+        let x = ?b + cInt
+
+        if x < -5 then
+            Nothing
+        else
+            Just (#x =. x, #sqrt_x =. sqrt (fromIntegral x :: Float))
         |]
 
     & appendCol [_eval| #sqrt_x_sq =. ?sqrt_x**2 |]
-
     & appendCol [_eval| #diff =. fromIntegral ?x - ?sqrt_x_sq |]
 
-    & printFrameWith defaultShowOptions { cellMaxWidth = 50 }
-
+    & printFrame
 {-# noinline testTransmuteAppend #-}
 
 
 main :: IO ()
-main = testFromCols `seq` testTransmuteAppend $
-    generateFrame $ Indexer 10 \i ->
-        HTuple (Solo (#b =. i))
+main = testTransmuteAppend $
+    generateFrame @Frame @'[_] $ Indexer 20 \i ->
+        HTuple (Solo (#b =. i - 10))

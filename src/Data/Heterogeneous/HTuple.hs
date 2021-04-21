@@ -22,6 +22,6 @@ htupleCo =
         Refl -> Coercion
 
 
-htupleCoF :: (HCoerce HTuple as, IsTupleOfF f as t) => t :~>: HTuple f as
+htupleCoF :: (IsTupleOfF f as t, HCoerce HTuple as) => t :~>: HTuple f as
 htupleCoF =
     hIdLCo <<< hconOutCo <<< htupleCo

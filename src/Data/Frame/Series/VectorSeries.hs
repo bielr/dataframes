@@ -52,14 +52,14 @@ instance IsSeries VectorSeries where
 
     seriesValues = from _VectorSeries . vectorTraverse
 
-    indexSeries (VectorSeries v) = indexVector v
+    indexSeries !(VectorSeries v) = indexVector v
 
     seriesToVector (VectorSeries v) = VG.convert v
 {-# rules "seriesToVector/VectorSeries/coerce" seriesToVector = \(VectorSeries v) -> v #-}
 
 
-instance GenerateSeries VectorSeries where
-    generateSeries = VectorSeries . copyIndexer
+instance Monad m => GenerateSeries m VectorSeries where
+    generateSeriesM = fmap VectorSeries . copyIndexerM
 
-    vectorToSeries = VectorSeries . VG.convert
-{-# rules "vectorToSeries/VectorSeries/coerce" vectorToSeries = VectorSeries #-}
+    vectorToSeries = return . VectorSeries . VG.convert
+{-# rules "vectorToSeries/VectorSeries/coerce" vectorToSeries = return . VectorSeries #-}

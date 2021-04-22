@@ -10,7 +10,7 @@ import GHC.Generics
 
 import Data.Foldable (foldl')
 import Data.IORef
-import Data.HashTable.IO qualified as HT
+import Data.HashMap.Strict qualified as HM
 import Data.Ratio (Ratio)
 import Data.Word (Word8)
 import Language.Haskell.TH.Lib
@@ -119,18 +119,19 @@ instance HasExps a => HasExps (TyVarBndr a)
 
 replaceImplicitParams :: Exp -> Q (Exp, [(String, Name)])
 replaceImplicitParams e = do
-    colsMapping :: HT.BasicHashTable String Name <- runIO $ HT.new
+    colsMappingRef <- runIO $ newIORef HM.empty
 
-    e' <- forMOf (exps (has _ImplicitParamVarE)) e \(ImplicitParamVarE p) ->
-        runIO (HT.lookup colsMapping p) >>= \case
-            Just varName ->
-                return (VarE varName)
-            Nothing -> do
-                varName <- newName p
-                runIO $ HT.insert colsMapping p varName
-                return (VarE varName)
+    e' <-
+        forMOf (exps (has _ImplicitParamVarE)) e \(ImplicitParamVarE p) ->
+            runIO (HM.lookup p <$> readIORef colsMappingRef) >>= \case
+                Just varName ->
+                    return (VarE varName)
+                Nothing -> do
+                    varName <- newName p
+                    runIO $ modifyIORef' colsMappingRef (HM.insert p varName)
+                    return (VarE varName)
 
-    colVarNames <- runIO $ HT.toList colsMapping
+    colVarNames <- runIO $ HM.toList <$> readIORef colsMappingRef
     return (e', colVarNames)
 
 
@@ -142,10 +143,11 @@ replaceSectionR :: Exp -> Q (Exp, [(Name, Exp)])
 replaceSectionR e = do
     bindsRef :: IORef [(Name, Exp)] <- runIO $ newIORef []
 
-    e' <- forMOf (exps (has (_SectionR '(?)))) e \(InfixE Nothing (VarE _) (Just inner)) -> do
-        bindName <- newName "env"
-        runIO $ modifyIORef' bindsRef ((bindName, inner) :)
-        return (VarE bindName)
+    e' <-
+        forMOf (exps (has (_SectionR '(?)))) e \(InfixE Nothing (VarE _) (Just inner)) -> do
+            bindName <- newName "env"
+            runIO $ modifyIORef' bindsRef ((bindName, inner) :)
+            return (VarE bindName)
 
     binds <- fmap reverse $ runIO $ readIORef bindsRef
     return (e', binds)

@@ -2,7 +2,8 @@
 {-# language StrictData #-}
 module Data.Indexer where
 
-import Control.Lens.Indexed (FunctorWithIndex(..), FoldableWithIndex(..))
+import Data.Foldable.WithIndex
+import Data.Functor.WithIndex
 import qualified Control.Lens as L
 
 import Data.Functor ((<&>))

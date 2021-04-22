@@ -64,8 +64,7 @@ common shared-properties
     , first-class-families
     , ghc-prim
     , hashable
-    , hashable
-    , hashtables
+    , indexed-traversable
     , lens
     , primitive
     , profunctors
@@ -74,6 +73,7 @@ common shared-properties
     , template-haskell
     , text
     , type-errors
+    , unordered-containers
     , vector
     , vector-algorithms
   default-language: Haskell2010
@@ -85,8 +85,10 @@ library
       Control.Rowwise
       Data.Frame.Class
       Data.Frame.Columns
+      Data.Frame.DataTypes.Factor
       Data.Frame.DataTypes.Vector
       Data.Frame.DataTypes.VectorMode
+      Data.Frame.Series.FactorizedSeries
       Data.Frame.Series.Class
       Data.Frame.Series.VectorSeries
       Data.Frame.Display

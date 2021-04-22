@@ -141,13 +141,13 @@ class
     )
     => HasColumnTraversal df col col' cols cols' i where
 
-    traverseColumn ::
+    columnValues ::
         ( IsFieldsProxy cols i proxy
         , CompatibleDataType (Column df) (FieldType col)
         , CompatibleDataType (Column df) (FieldType col')
         )
         => proxy
-        -> Traversal (df cols) (df cols') (FieldType col) (FieldType col')
+        -> IndexedTraversal Int (df cols) (df cols') (FieldType col) (FieldType col')
 
 
 class IsFrame df => ColumnarFrame df where

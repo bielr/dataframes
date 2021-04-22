@@ -32,6 +32,12 @@ instance IsFrame df => IsFrame (ZoomedFrame x df) where
     runEval (ZoomedFrame x df) (ZoomedEval xea) = runEval df (xea x)
 
 
+withHidden :: IsFrame df => (x -> a) -> Eval (ZoomedFrame x df) cols a
+withHidden prj = ZoomedEval \ !x ->
+    let !a = prj x
+    in  pure a
+
+
 zoomedEvalCo :: Coercion (x -> Eval df cols a) (Eval (ZoomedFrame x df) cols a)
 zoomedEvalCo = Coercion
 
@@ -59,8 +65,8 @@ instance HasColumnAt df cols i => HasColumnAt (ZoomedFrame x df) cols i where
 instance HasColumnTraversal df col col' cols cols' i
     => HasColumnTraversal (ZoomedFrame x df) col col' cols cols' i where
 
-    traverseColumn proxy f (ZoomedFrame x df) =
-        ZoomedFrame x <$> traverseColumn proxy f df
+    columnValues proxy f (ZoomedFrame x df) =
+        ZoomedFrame x <$> columnValues proxy f df
 
 
 instance ColumnarFrame df => ColumnarFrame (ZoomedFrame x df) where
@@ -111,6 +117,10 @@ zoomOut _ (ZoomedFrame xdf df) =
         (\xcols cols' -> hsubseqSplitI @_ @_ @_ @_ @is # (cols', xcols))
         xdf
         df
+
+
+forget :: Zoomed x df cols -> df cols
+forget (Zoomed _ df) = df
 
 
 zooming' :: forall cols0' cols1' xcols cols0 cols1 is df proxy.

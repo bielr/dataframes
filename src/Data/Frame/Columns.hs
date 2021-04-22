@@ -96,8 +96,8 @@ instance
     )
     => HasColumnTraversal (Columns hf series) col col' cols cols' i where
 
-    traverseColumn _ =
-        columns . hmemberI @_ @col @col' @cols @cols' @i . traverseSeries
+    columnValues _ =
+        columns . hmemberI @_ @col @col' @cols @cols' @i . seriesValues
 
 
 instance IsSeries series => ColumnarFrame (Columns hf series) where
@@ -108,9 +108,6 @@ instance IsSeries series => ColumnarFrame (Columns hf series) where
 instance IsSeries series => ColumnarFrameEdit (Columns hf series) where
     editColsWith f (Columns n cols) = Columns n (f cols)
 
-
--- instance (IsSeries series, HSingleton hf) => FromSingleColumn (Columns hf series) where
---     fromSingleCol series = Columns (seriesLength series) (hsingleton # series)
 
 instance (HMonoid hf, IsSeries series) => EmptyFrame (Columns hf series) where
     emptyFrame n = Columns n hempty

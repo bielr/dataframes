@@ -50,8 +50,6 @@ _MVectorSeries = coerced
 instance IsSeries VectorSeries where
     type CompatibleDataType VectorSeries = CompatibleDataType_
 
-    seriesValues = from _VectorSeries . vectorTraverse
-
     indexSeries !(VectorSeries v) = indexVector v
 
     seriesToVector (VectorSeries v) = VG.convert v
@@ -63,3 +61,7 @@ instance Monad m => GenerateSeries m VectorSeries where
 
     vectorToSeries = return . VectorSeries . VG.convert
 {-# rules "vectorToSeries/VectorSeries/coerce" vectorToSeries = return . VectorSeries #-}
+
+
+instance TraversableSeries VectorSeries where
+    seriesValues = from _VectorSeries . vectorTraverse

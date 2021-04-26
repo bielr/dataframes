@@ -7,7 +7,10 @@ module Data.Frame.Class where
 import Prelude hiding ((.))
 
 import Control.Category (Category(..))
+import Control.Monad.Morph (MFunctor)
 import Control.Lens.Type
+import Data.Coerce
+import Data.Functor.Apply
 import Data.Functor.Identity
 import Data.Profunctor.Unsafe
 import Data.Roles
@@ -23,7 +26,6 @@ import Data.Heterogeneous.Constraints
 import Data.Heterogeneous.HTuple
 import Data.Heterogeneous.TypeLevel
 import Data.Heterogeneous.TypeLevel.Subseq
-import Data.Indexer
 
 
 type CompatibleDataTypes :: FrameK -> [Type] -> Constraint
@@ -34,15 +36,25 @@ type CompatibleFields :: FrameK -> [FieldK] -> Constraint
 type CompatibleFields df cols = All (CompatibleField (Column df)) cols
 
 
+asCoercion :: Coercible a b => (a -> b) -> (a :~>: b)
+asCoercion _ = Coercion
+
+
+asTypeOfCo :: (a :~>: b) -> (a -> b) -> (a :~>: b)
+asTypeOfCo = const
+
+
 type IsFrame :: FrameK -> Constraint
 
 class
     -- Columns should be some kind of series
     ( IsSeries (Column df)
-    -- Eval must be an Applicative functor
-    , forall cols. Applicative (Eval df cols)
-    -- Eval df cols must have a representational argument
-    , forall cols. Representational (Eval df cols)
+    -- EvalT must be an Applicative functor
+    , forall cols m. Apply m => Apply (EvalT df cols m)
+    -- EvalT df cols m must have a representational argument
+    , forall cols m. Representational m => Representational (EvalT df cols m)
+    -- EvalT df cols must be a MFunctor
+    , forall cols. MFunctor (EvalT df cols)
     )
     => IsFrame df where
 
@@ -50,57 +62,80 @@ class
 
     type Column df :: FieldK -> Type
 
-    data Eval df :: [FieldK] -> Type -> Type
+    data EvalT df :: [FieldK] -> (Type -> Type) -> Type -> Type
 
-    withFrame :: (df cols -> r) -> Eval df cols r
-    getRowIndex :: Eval df cols Int
+    withFrame :: Monad m => (df cols -> EvalT df cols m r) -> EvalT df cols m r
+    getRowIndex :: Monad m => EvalT df cols m Int
 
-    runEval :: df cols -> Eval df cols a -> Indexer a
+    mapEvalM ::
+        Monad m
+        => (a -> m b)
+        -> EvalT df cols m a
+        -> EvalT df cols m b
 
+    foldlEvalM ::
+        Monad m
+        => (b -> a -> m b)
+        -> b
+        -> df cols
+        -> EvalT df cols m a
+        -> m b
 
-frameEvalCo :: IsFrame df => (a :~>: b) -> (Eval df cols a :~>: Eval df cols b)
+    sourceColumn ::
+        Monad m
+        => Column df col
+        -> EvalT df cols m (Field col)
+
+frameEvalCo ::
+    ( IsFrame df
+    , Representational m
+    )
+    => (a :~>: b)
+    -> (EvalT df cols m a :~>: EvalT df cols m b)
 frameEvalCo = rep
 
 
-htupleEvalCo :: forall t f df cols cols'.
+htupleEvalCo :: forall t f df cols cols' m.
     ( IsFrame df
     , HCoerce HTuple cols'
     , IsTupleOfF f cols' t
+    , Representational m
     )
-    => Eval df cols t :~>: Eval df cols (HTuple f cols')
+    => EvalT df cols m t :~>: EvalT df cols m (HTuple f cols')
 htupleEvalCo = frameEvalCo htupleCoF
 
 
-coerceHTupleEval :: forall f cols' cols t df.
+coerceHTupleEval :: forall f cols' cols t df m.
     ( IsFrame df
     , HCoerce HTuple cols'
     , IsTupleOfF f cols' t
+    , Representational m
     )
-    => Eval df cols t
-    -> Eval df cols (HTuple f cols')
+    => EvalT df cols m t
+    -> EvalT df cols m (HTuple f cols')
 coerceHTupleEval = coerceWith htupleEvalCo
 
 
-evalColumn :: forall col cols df.
-    ( IsFrame df
-    , GenerateSeries Identity (Column df)
-    , CompatibleDataType (Column df) (FieldType col)
-    )
-    => df cols
-    -> Eval df cols (FieldType col)
-    -> Column df col
-evalColumn df = generateSeries . runEval df
-
-
-evalColumnM :: forall col cols df m.
-    ( IsFrame df
-    , GenerateSeries m (Column df)
-    , CompatibleDataType (Column df) (FieldType col)
-    )
-    => df cols
-    -> Eval df cols (m (FieldType col))
-    -> m (Column df col)
-evalColumnM df = generateSeriesM . runEval df
+-- evalColumn :: forall col cols df.
+--     ( IsFrame df
+--     , GenerateSeries Identity (Column df)
+--     , CompatibleDataType (Column df) (FieldType col)
+--     )
+--     => df cols
+--     -> Eval df cols (FieldType col)
+--     -> Column df col
+-- evalColumn df = generateSeries . runEval df
+--
+--
+-- evalColumnM :: forall col cols df m.
+--     ( IsFrame df
+--     , GenerateSeries m (Column df)
+--     , CompatibleDataType (Column df) (FieldType col)
+--     )
+--     => df cols
+--     -> Eval df cols (m (FieldType col))
+--     -> m (Column df col)
+-- evalColumnM df = generateSeriesM . runEval df
 
 
 class IsFrame df => HasColumnAt df cols i where
@@ -109,12 +144,11 @@ class IsFrame df => HasColumnAt df cols i where
     findField ::
         ( IsFieldsProxy cols i proxy
         , CompatibleField (Column df) (cols !! i)
+        , Monad m
         )
         => proxy
-        -> Eval df cols (Field (cols !! i))
-    findField proxy =
-        withFrame (fmap Field #. elemAt . indexSeries . findColumn proxy)
-            <*> getRowIndex
+        -> EvalT df cols m (Field (cols !! i))
+    findField proxy = withFrame (sourceColumn . findColumn proxy)
 
 
     default findColumn ::
@@ -147,7 +181,9 @@ class
         , CompatibleDataType (Column df) (FieldType col')
         )
         => proxy
-        -> IndexedTraversal Int (df cols) (df cols') (FieldType col) (FieldType col')
+        -> IndexedTraversal Int
+            (df cols)       (df cols')
+            (FieldType col) (FieldType col')
 
 
 class IsFrame df => ColumnarFrame df where
@@ -194,7 +230,7 @@ class (ColumnarFrameEdit df, GenerateSeries m (Column df)) => InsertColumn m df 
     insertColumnWithM ::
         CompatibleField (Column df) col
         => (forall f. ColumnarHRep df f cols -> f col -> ColumnarHRep df f cols')
-        -> Eval df cols (m (Field col))
+        -> EvalT df cols m (Field col)
         -> df cols
         -> m (df cols')
 
@@ -204,13 +240,11 @@ insertColumnWith :: forall col df cols cols'.
     , CompatibleField (Column df) col
     )
     => (forall f. ColumnarHRep df f cols -> f col -> ColumnarHRep df f cols')
-    -> Eval df cols (Field col)
+    -> EvalT df cols Identity (Field col)
     -> df cols
     -> df cols'
 insertColumnWith insert =
-    (runIdentity .)
-        #. insertColumnWithM insert
-        . coerceWith (frameEvalCo Coercion)
+    (runIdentity .) #. insertColumnWithM insert
 
 
 class InsertColumn m df => ExtendFrame m df hf cols' where
@@ -219,7 +253,7 @@ class InsertColumn m df => ExtendFrame m df hf cols' where
             ColumnarHRep df f cols
             -> ColumnarHRep df f cols'
             -> ColumnarHRep df f cols'')
-        -> Eval df cols (m (hf Field cols'))
+        -> EvalT df cols m (hf Field cols')
         -> df cols
         -> m (df cols'')
 
@@ -230,16 +264,11 @@ extendFrameWith ::
             ColumnarHRep df f cols
             -> ColumnarHRep df f cols'
             -> ColumnarHRep df f cols'')
-    -> Eval df cols (hf Field cols')
+    -> EvalT df cols Identity (hf Field cols')
     -> df cols
     -> df cols''
 extendFrameWith insert =
-    (runIdentity .)
-        #. extendFrameWithM insert
-        . coerceWith (frameEvalCo idCo)
-  where
-    idCo :: a :~>: Identity a
-    idCo = Coercion
+    (runIdentity .) #. extendFrameWithM insert
 
 
 class ExtendFrame m df hf cols' => ExtendFrameMaybe m df hf cols cols' where
@@ -248,7 +277,7 @@ class ExtendFrame m df hf cols' => ExtendFrameMaybe m df hf cols cols' where
             ColumnarHRep df f cols
             -> ColumnarHRep df f cols'
             -> ColumnarHRep df f cols'')
-        -> Eval df cols (m (Maybe (hf Field cols')))
+        -> EvalT df cols m (Maybe (hf Field cols'))
         -> df cols
         -> m (df cols'')
 
@@ -259,19 +288,14 @@ extendFrameWithMaybe ::
             ColumnarHRep df f cols
             -> ColumnarHRep df f cols'
             -> ColumnarHRep df f cols'')
-    -> Eval df cols (Maybe (hf Field cols'))
+    -> EvalT df cols Identity (Maybe (hf Field cols'))
     -> df cols
     -> df cols''
 extendFrameWithMaybe insert =
-    (runIdentity .)
-        #. extendFrameWithMaybeM insert
-        . coerceWith (frameEvalCo idCo)
-  where
-    idCo :: a :~>: Identity a
-    idCo = Coercion
+    (runIdentity .) #. extendFrameWithMaybeM insert
 
 
-
+{-
 type GenerateFrame m df hf cols =
     ( EmptyFrame df
     , ExtendFrame m df hf cols
@@ -326,16 +350,4 @@ generateFrameMaybe :: forall df cols hf.
     -> df cols
 generateFrameMaybe =
     runIdentity #. generateFrameMaybeM .# fmap Identity
-
-
--- class ExtendFrame m df hf cols => GenerateFrame m df hf cols where
---     generateFrameM ::
---         CompatibleFields df cols
---         => Indexer (m (hf Field cols))
---         -> m (df cols)
---
---     generateFrameMaybeM ::
---         CompatibleFields df cols
---         => Indexer (m (Maybe (hf Field cols)))
---         -> m (df cols)
-
+-}

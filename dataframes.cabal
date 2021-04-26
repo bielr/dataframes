@@ -66,9 +66,11 @@ common shared-properties
     , hashable
     , indexed-traversable
     , lens
+    , mmorph
     , primitive
     , profunctors
     , roles
+    , semigroupoids
     , tagged
     , template-haskell
     , text
@@ -88,7 +90,7 @@ library
       Data.Frame.DataTypes.Factor
       Data.Frame.DataTypes.Vector
       Data.Frame.DataTypes.VectorMode
-      Data.Frame.Series.FactorizedSeries
+      Data.Frame.Series.FactorSeries
       Data.Frame.Series.Class
       Data.Frame.Series.VectorSeries
       Data.Frame.Display
@@ -99,7 +101,7 @@ library
       Data.Frame.Sugar
       Data.Frame.TH.Eval
       Data.Frame.TypeIndex
-      Data.Frame.Zoomed
+      -- Data.Frame.Zoomed
       Data.Functor.Boilerplate
       Data.Heterogeneous.Class.HApply
       Data.Heterogeneous.Class.HCoerce

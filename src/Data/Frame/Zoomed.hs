@@ -119,8 +119,8 @@ zoomOut _ (ZoomedFrame xdf df) =
         df
 
 
-forget :: Zoomed x df cols -> df cols
-forget (Zoomed _ df) = df
+forget :: ZoomedFrame x df cols -> df cols
+forget (ZoomedFrame _ df) = df
 
 
 zooming' :: forall cols0' cols1' xcols cols0 cols1 is df proxy.

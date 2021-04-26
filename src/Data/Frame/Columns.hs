@@ -1,5 +1,6 @@
 --{-# options_ghc -ddump-simpl -dsuppress-idinfo -dsuppress-unfoldings -dsuppress-coercions #-}
 {-# language ApplicativeDo #-}
+{-# language DeriveFunctor #-}
 {-# language GeneralizedNewtypeDeriving #-}
 {-# language MagicHash #-}
 {-# language RoleAnnotations #-}
@@ -7,24 +8,30 @@
 {-# language UndecidableInstances #-}
 module Data.Frame.Columns where
 
-import Prelude hiding ((.))
-
 import GHC.Exts (SPEC(..), Int(..), Int#, (+#), (<#), isTrue#)
 import GHC.Stack
 
-import Control.Category (Category(..))
-import Control.Lens hiding ((:>))
+import Control.Category ((<<<))
+import Control.Lens hiding ((<.>))
 import Control.Monad
+import Control.Monad.Morph (MFunctor(..))
 import Control.Monad.ST qualified as ST
-import Control.Monad.Primitive (MonadPrim, PrimMonad)
-import Control.Rowwise
+import Control.Monad.Primitive (MonadPrim, PrimMonad, stToPrim)
+import Data.Coerce
+import Data.Functor.Apply
 import Data.Profunctor.Unsafe
 import Data.Roles
 import Data.Type.Coercion
-import Data.Vector.Generic qualified as VG
-import Data.Vector.Generic.Mutable qualified as VGM
-import Data.Vector.Unboxed qualified as VU
-import Data.Vector.Unboxed.Mutable qualified as VUM
+import Data.Vector.Fusion.Util           qualified as VS (Id(..))
+import Data.Vector.Fusion.Bundle.Monadic qualified as VS (fromStream)
+import Data.Vector.Fusion.Bundle.Size    qualified as VS
+import Data.Vector.Fusion.Stream.Monadic qualified as VS
+import Data.Vector.Generic               qualified as VG
+import Data.Vector.Generic.Mutable       qualified as VGM
+import Data.Vector.Unboxed               qualified as VU
+import Data.Vector.Unboxed.Mutable       qualified as VUM
+
+import Unsafe.Coerce
 
 import Data.Frame.Class
 import Data.Frame.Series.Class
@@ -58,25 +65,98 @@ data Columns hf series cols = Columns
 makeLenses ''Columns
 
 
+type role SizedStream representational nominal
+
+type SizedStream :: (Type -> Type) -> Type -> Type
+data SizedStream m a = SizedStream !VS.Size !(VS.Stream m a)
+    deriving stock Functor
+
+
+instance Representational SizedStream where
+    rep Coercion = Coercion
+
+
+instance Representational m => Representational (SizedStream m) where
+    rep co = repr $ unsafeCoerce (Refl @(SizedStream m))
+
+
+instance MFunctor SizedStream where
+    hoist h (SizedStream sz s) = SizedStream sz (VS.trans h s)
+
+
+instance Monad m => Apply (SizedStream m) where
+    SizedStream sz sf <.> SizedStream sz' sx =
+        SizedStream (VS.smaller sz sz') (VS.zipWith ($) sf sx)
+
+
+fromSizedStream :: forall v a. VG.Vector v a => SizedStream Identity a -> v a
+fromSizedStream (SizedStream sz s) =
+    gcoerceWith idIdCo $
+        VG.unstream (VS.fromStream (coerce s) sz)
+  where
+    idIdCo :: Coercion VS.Id Identity
+    idIdCo = unsafeCoerce (Coercion :: Coercion Identity Identity)
+
+
+fromSizedStreamM :: forall v a m. (PrimMonad m, VG.Vector v a) => SizedStream m a -> m (v a)
+fromSizedStreamM (SizedStream sz s) = do
+    mv <- VGM.munstream (VS.fromStream @m @a @v s sz)
+    VG.unsafeFreeze mv
+{-# specialize
+    fromSizedStreamM :: VG.Vector v a => SizedStream (ST.ST s) a -> ST.ST s (v a) #-}
+{-# specialize
+    fromSizedStreamM :: VG.Vector v a => SizedStream IO a        -> IO (v a)      #-}
+
+
 instance IsSeries series => IsFrame (Columns hf series) where
     frameLength (Columns n _) = n
 
     type instance Column (Columns hf series) = series
 
-    -- type Eval :: FieldsK -> Type -> Type -> Type
-    -- type role Eval nominal nominal nominal representational
-    newtype Eval (Columns hf series) cols a =
-        RowwiseEval (Rowwise (Columns hf series cols) a)
-        deriving newtype (Functor, Applicative)
+    -- type EvalT _ :: FieldsK -> (Type -> Type) -> Type -> Type
+    -- type role EvalT nominal nominal representational representational
+    newtype EvalT (Columns hf series) cols m a =
+        -- RowwiseEval (Rowwise (Columns hf series cols) a)
+        StreamEval { runStreamEval :: Columns hf series cols -> SizedStream m a }
+        deriving stock Functor
 
-    withFrame f = RowwiseEval (withCtx f)
-    getRowIndex = RowwiseEval rowid
+    mapEvalM f e = StreamEval \df ->
+        let SizedStream sz s = runStreamEval e df
+        in  SizedStream sz (VS.mapM f s)
 
-    runEval df@(Columns n _) (RowwiseEval rww) = Indexer n (runRowwise rww df)
+
+    withFrame f = StreamEval \df -> runStreamEval (f df) df
+
+    getRowIndex = StreamEval \df ->
+        let !len = frameLength df
+        in  SizedStream (VS.Exact len) (VS.generate len id)
 
 
-instance Representational (Eval (Columns hf series) cols) where
-    rep Coercion = Coercion
+newColumnM ::
+    ( IsSeries series
+    , CompatibleDataType series (FieldType col)
+    , Monad m
+    )
+    => df cols
+    -> EvalT (Columns hf series) cols m (FieldType col)
+    -> m (series col)
+newColumnM df e =
+    fromSizedStream
+    case runStreamEval e df of
+        SizedStream sz s ->
+            VectorSeries <$> VS.fromStream s sz
+
+
+instance Representational m => Representational (EvalT (Columns hf series) cols m) where
+    rep co = asCoercion StreamEval  <<< rep (rep (rep co)) <<< Coercion
+
+
+instance Monad m => Apply (EvalT (Columns hf series) cols m) where
+    StreamEval fsf <.> StreamEval fsx = StreamEval (fsf <.> fsx)
+
+
+instance MFunctor (EvalT (Columns hf series) cols) where
+    hoist h e = StreamEval (hoist h . runStreamEval e)
 
 
 instance
@@ -133,11 +213,9 @@ instance {-# overlaps #-}
     )
     => ExtendFrame Identity (Columns hf VectorSeries) hg cols' where
 
-    extendFrameWithM weave (RowwiseEval emcols') df@(Columns n cols) =
-        let !ix# = runRowwise# emcols' df
-
-            Columns _ cols' = ST.runST $
-                generateColumnsM# n \i -> return (runIdentity (ix# i))
+    extendFrameWithM weave emcols' df@(Columns n cols) =
+        let Columns _ cols' = ST.runST $
+                generateColumnsM# n $! runStreamEval emcols' df
         in
             Identity (Columns n (cols `weave` hconv cols'))
     {-# inline extendFrameWithM #-}
@@ -152,8 +230,8 @@ instance {-# overlappable #-}
     )
     => ExtendFrame m (Columns hf VectorSeries) hg cols' where
 
-    extendFrameWithM weave (RowwiseEval emcols') df@(Columns n cols) = do
-        Columns _ cols' <- generateColumnsM# n $! runRowwise# emcols' df
+    extendFrameWithM weave emcols' df@(Columns n cols) = do
+        Columns _ cols' <- generateColumnsM# n $! runStreamEval emcols' df
 
         return (Columns n (cols `weave` hconv cols'))
     {-# inline extendFrameWithM #-}
@@ -169,11 +247,9 @@ instance {-# overlaps #-}
     )
     => ExtendFrameMaybe Identity (Columns hf VectorSeries) hg cols cols' where
 
-    extendFrameWithMaybeM weave (RowwiseEval emcols') df@(Columns n cols) =
-        let !ix# = runRowwise# emcols' df
-
-            (preserved, Columns _ cols') = ST.runST $
-                generateColumnsMaybeM# n \i -> return (runIdentity (ix# i))
+    extendFrameWithMaybeM weave emcols' df@(Columns n cols) =
+        let (preserved, Columns _ cols') = ST.runST $
+                generateColumnsMaybeM# n $! runStreamEval emcols' df
 
             reindexCols = hmapC @(CompatibleField VectorSeries) $
                 over (from _VectorSeries) (`VG.backpermute` VG.convert preserved)
@@ -193,8 +269,9 @@ instance {-# overlappable #-}
     )
     => ExtendFrameMaybe m (Columns hf VectorSeries) hg cols cols' where
 
-    extendFrameWithMaybeM weave (RowwiseEval emcols') df@(Columns n cols) = do
-        (preserved, Columns _ cols') <- generateColumnsMaybeM# n $! runRowwise# emcols' df
+    extendFrameWithMaybeM weave emcols' df@(Columns n cols) = do
+        (preserved, Columns _ cols') <-
+            generateColumnsMaybeM# n $! runStreamEval emcols' df
 
         let reindexCols = hmapC @(CompatibleField VectorSeries) $
                 over (from _VectorSeries) (`VG.backpermute` VG.convert preserved)
@@ -279,7 +356,10 @@ fromCols_ :: forall cols hf series t.
     )
     => t
     -> Maybe (Columns hf series cols)
-fromCols_ = fromColsMaybe . fromHTuple .# coerceWith (hIdLCo . hconOutCo . htupleCo)
+fromCols_ =
+    fromColsMaybe
+    . fromHTuple
+    .# coerceWith (hIdLCo <<< hconOutCo <<< htupleCo)
 
 
 -- unsafe! TODO: do better with a wrapper frame type

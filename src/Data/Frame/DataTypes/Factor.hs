@@ -1,6 +1,7 @@
+{-# language StrictData #-}
 module Data.Frame.DataTypes.Factor where
 
-import Control.Lens qualified as L
+import Control.Applicative
 import Control.Monad.ST qualified as ST
 
 import Data.Foldable.WithIndex
@@ -13,12 +14,15 @@ import Data.Vector.Mutable qualified as VBM
 import Data.Vector.Unboxed qualified as VU
 import Data.Vector.Unboxed.Mutable qualified as VUM
 
+import Data.Heterogeneous.HList
+import Data.Heterogeneous.Functors
+
 
 
 
 data Uniques a = Uniques
-    { uniquesIdsMap   :: !(HM.HashMap a Int)
-    , uniquesIdVector :: !(VU.Vector Int)
+    { uniquesIdsMap   :: HM.HashMap a Int
+    , uniquesIdVector :: VU.Vector Int
     }
 
 
@@ -26,7 +30,7 @@ uniquesNumDistinct :: Uniques a -> Int
 uniquesNumDistinct = HM.size . uniquesIdsMap
 
 
-data UniqState a = UniqState !Int !(HM.HashMap a Int)
+data UniqState a = UniqState {-# unpack #-} Int (HM.HashMap a Int)
 
 
 uniquesHashable :: (Eq a , Hashable a) => Indexer a -> Uniques a
@@ -50,8 +54,8 @@ uniquesHashable as = ST.runST do
 
 
 data FactorLevels a = FactorLevels
-    { levelsLabels :: !(VB.Vector a)
-    , levelsIds    :: !(HM.HashMap a Int)
+    { levelsLabels :: VB.Vector a
+    , levelsIds    :: HM.HashMap a Int
     }
 
 
@@ -60,8 +64,8 @@ levelsSize = VB.length . levelsLabels
 
 
 data Factor a = Factor
-    { factorLevels   :: !(FactorLevels a)
-    , factorIdVector :: !(VU.Vector Int)
+    { factorLevels   :: FactorLevels a
+    , factorIdVector :: VU.Vector Int
     }
 
 
@@ -121,27 +125,33 @@ factorGroupSortPermutation f@(Factor lvs idVec) = ST.runST do
     VU.unsafeFreeze permutation
 
 
-data CombinedFactors f as where
-    SingleFactor    :: Factor (f a) -> CombinedFactors f '[a]
-    CombinedFactors :: Factor Int -> Factor (f a) -> CombinedFactors f as -> CombinedFactors f (a ': as)
+data MultiFactor f as where
+    SingleFactor    ::               Factor (f a)                     -> MultiFactor f '[a]
+    CombinedFactors :: Factor Int -> Factor (f a) -> MultiFactor f as -> MultiFactor f (a ': as)
 
 
-combinedFactorsIdVector :: CombinedFactors f as -> VU.Vector Int
-combinedFactorsIdVector (SingleFactor f) = factorIdVector f
-combinedFactorsIdVector (CombinedFactors combined f fs) = factorIdVector combined
+multiFactorIdVector :: MultiFactor f as -> VU.Vector Int
+multiFactorIdVector (SingleFactor f)                 = factorIdVector f
+multiFactorIdVector (CombinedFactors compressed _ _) = factorIdVector compressed
 
 
-indexCombinedFactors :: CombinedFactors f as -> HList (Indexer :. f) as
-indexCombinedFactors (SingleFactor f) = Compose (indexFactor f) :& HNil
-indexCombinedFactors (CombinedFactors _ f fs) = Compose (indexFactor f) :& indexCombinedFactors fs
+toFactors :: MultiFactor f as -> HList (Factor :. f) as
+toFactors (SingleFactor f)         = Compose f :& HNil
+toFactors (CombinedFactors _ f fs) = Compose f :& toFactors fs
 
 
-combineFactors :: Factor (f a) -> CombinedFactors f as -> CombinedFactors f (a ': as)
-combineFactors f@(Factor lvsA idVecA) fs =
+fromFactors :: HList (Factor :. f) (a ': as) -> MultiFactor f (a ': as)
+fromFactors (f :& HNil)        = SingleFactor (getCompose f)
+fromFactors (f :& fs@(_ :& _)) = addFactor (getCompose f) (fromFactors fs)
+
+
+addFactor :: Factor (f a) -> MultiFactor f as -> MultiFactor f (a ': as)
+addFactor f@(Factor lvsA idVecA) fs =
     let compressed = factorizeHashable $
             liftA2 (\idA idAS -> idA + idAS * levelsSize lvsA)
                 (indexVector idVecA)
-                (indexVector (combinedFactorsIdVector fs))
+                (indexVector (multiFactorIdVector fs))
 
     in
         CombinedFactors compressed f fs
+

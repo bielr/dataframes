@@ -17,7 +17,7 @@ import Language.Haskell.TH.Lib
 import Language.Haskell.TH.Syntax
 import Type.Errors (DelayError, ErrorMessage(..))
 
-import Data.Frame.Class (Eval, findField)
+import Data.Frame.Class (EvalT, findField)
 import Data.Frame.Field (getField)
 
 import Control.Lens (Prism', Traversal', _Just, prism, has, forMOf)
@@ -135,7 +135,7 @@ replaceImplicitParams e = do
     return (e', colVarNames)
 
 
-(?) :: DelayError ('Text "Data.Frame.TH.Eval.? used outside of $(eval ...)") => xxx -> Eval df cols a -> yyy
+(?) :: DelayError ('Text "Data.Frame.TH.Eval.? used outside of $(eval ...)") => xxx -> EvalT df cols m a -> yyy
 (?) = undefined
 
 
